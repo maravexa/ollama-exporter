@@ -54,6 +54,20 @@
         "multi": false,
         "refresh": 1,
         "current": {}
+      },
+      {
+        "name": "endpoint",
+        "label": "Endpoint",
+        "type": "query",
+        "datasource": "${datasource}",
+        "query": "label_values(ollama_requests_total{job=\"ollama\"}, endpoint)",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+",
+        "current": {},
+        "sort": 1,
+        "hide": 0
       }
     ]
   },
@@ -353,19 +367,19 @@
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "histogram_quantile(0.50, rate(ollama_request_duration_seconds_bucket{job=\"ollama\",endpoint=\"/api/generate\"}[5m]))",
+          "expr": "histogram_quantile(0.50, rate(ollama_request_duration_seconds_bucket{job=\"ollama\",endpoint=~\"$endpoint\"}[5m]))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
           "datasource": "${datasource}",
-          "expr": "histogram_quantile(0.95, rate(ollama_request_duration_seconds_bucket{job=\"ollama\",endpoint=\"/api/generate\"}[5m]))",
+          "expr": "histogram_quantile(0.95, rate(ollama_request_duration_seconds_bucket{job=\"ollama\",endpoint=~\"$endpoint\"}[5m]))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
           "datasource": "${datasource}",
-          "expr": "histogram_quantile(0.99, rate(ollama_request_duration_seconds_bucket{job=\"ollama\",endpoint=\"/api/generate\"}[5m]))",
+          "expr": "histogram_quantile(0.99, rate(ollama_request_duration_seconds_bucket{job=\"ollama\",endpoint=~\"$endpoint\"}[5m]))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -517,7 +531,7 @@
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "ollama_requests_in_flight{job=\"ollama\",endpoint=\"/api/generate\"}",
+          "expr": "ollama_requests_in_flight{job=\"ollama\",endpoint=~\"$endpoint\"}",
           "legendFormat": "{{model}}",
           "refId": "A"
         }
@@ -546,7 +560,7 @@
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "rate(ollama_requests_total{job=\"ollama\"}[5m])",
+          "expr": "rate(ollama_requests_total{job=\"ollama\",endpoint=~\"$endpoint\"}[5m])",
           "legendFormat": "{{model}} {{endpoint}}",
           "refId": "A"
         }
