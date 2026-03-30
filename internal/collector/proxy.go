@@ -71,8 +71,23 @@ func (p *Proxy) Start(ctx context.Context) error {
 // and end-to-end latency before the response body is inspected.
 func (p *Proxy) instrumentedHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		model := r.URL.Query().Get("model") // best-effort; body parsing happens in modifyResponse
+		model := r.URL.Query().Get("model")
 		endpoint := r.URL.Path
+
+		if r.Method == http.MethodPost &&
+			(endpoint == "/api/generate" || endpoint == "/api/chat") &&
+			r.Body != nil {
+			body, err := io.ReadAll(r.Body)
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			if err == nil {
+				var req struct {
+					Model string `json:"model"`
+				}
+				if json.Unmarshal(body, &req) == nil && req.Model != "" {
+					model = req.Model
+				}
+			}
+		}
 
 		p.metrics.RequestsInFlight.WithLabelValues(model, endpoint).Inc()
 		defer p.metrics.RequestsInFlight.WithLabelValues(model, endpoint).Dec()
