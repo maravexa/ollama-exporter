@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -96,16 +97,31 @@ func (p *Proxy) modifyResponse(resp *http.Response) error {
 		return nil
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
+	var buf bytes.Buffer
+	var final ollama.GenerateResponse
+	var foundDone bool
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		buf.Write(line)
+		buf.WriteByte('\n')
+
+		var chunk ollama.GenerateResponse
+		if err := json.Unmarshal(line, &chunk); err == nil && chunk.Done {
+			final = chunk
+			foundDone = true
+		}
+	}
+	if err := scanner.Err(); err != nil {
 		return err
 	}
-	resp.Body = io.NopCloser(bytes.NewReader(body))
+	resp.Body = io.NopCloser(bytes.NewReader(buf.Bytes()))
 
-	var gen ollama.GenerateResponse
-	if err := json.Unmarshal(body, &gen); err != nil || !gen.Done {
+	if !foundDone {
 		return nil
 	}
+	gen := final
 
 	family, quant := parseModelName(gen.Model)
 	labels := []string{gen.Model, family, quant}
