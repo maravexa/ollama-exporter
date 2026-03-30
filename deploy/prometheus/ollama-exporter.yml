@@ -1,8 +1,20 @@
+# ollama-exporter scrape config
+#
+# Usage:
+#   Option A — include this file from prometheus.yml:
+#     scrape_config_files:
+#       - /etc/prometheus/conf.d/ollama-exporter.yml
+#
+#   Option B — copy the scrape_configs block directly into your prometheus.yml
+#
+# For distributed setups, replace localhost with your exporter hostname.
+# Exporter metrics endpoint: http://localhost:9400/metrics
+# Proxy endpoint (point Ollama clients here): http://localhost:9401
+
 scrape_configs:
   - job_name: 'ollama'
     scrape_interval: 15s
     static_configs:
-      - targets: ['ollama-exporter:9400']
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
+      - targets: ['localhost:9400']
+        labels:
+          instance: 'localhost'
