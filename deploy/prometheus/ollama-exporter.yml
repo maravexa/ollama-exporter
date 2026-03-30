@@ -1,0 +1,8 @@
+scrape_configs:
+  - job_name: 'ollama'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['ollama-exporter:9400']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance

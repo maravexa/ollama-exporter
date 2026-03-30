@@ -1,0 +1,79 @@
+// Package config handles loading and validating exporter configuration.
+package config
+
+import (
+	"fmt"
+	"os"
+	"time"
+)
+
+// Config holds all runtime configuration for the exporter.
+type Config struct {
+	// OllamaURL is the base URL of the Ollama API.
+	OllamaURL string
+
+	// ListenAddr is the address the metrics HTTP server binds to.
+	ListenAddr string
+
+	// PollInterval controls how often the poller scrapes /api/ps and /api/tags.
+	PollInterval time.Duration
+
+	// Proxy holds proxy mode configuration.
+	Proxy ProxyConfig
+
+	// LogLevel controls structured log verbosity.
+	LogLevel string
+}
+
+// ProxyConfig holds configuration for the transparent proxy mode.
+type ProxyConfig struct {
+	// Enabled activates the reverse proxy listener.
+	Enabled bool
+
+	// ListenAddr is the address the proxy HTTP server binds to.
+	ListenAddr string
+}
+
+// Load reads configuration from the given YAML file path,
+// applying environment variable overrides where present.
+// TODO: implement YAML parsing via encoding/json or a minimal YAML parser.
+func Load(path string) (*Config, error) {
+	cfg := defaults()
+
+	// Environment variable overrides.
+	if v := os.Getenv("OLLAMA_URL"); v != "" {
+		cfg.OllamaURL = v
+	}
+	if v := os.Getenv("LISTEN_ADDR"); v != "" {
+		cfg.ListenAddr = v
+	}
+
+	if err := cfg.validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+
+	return cfg, nil
+}
+
+func defaults() *Config {
+	return &Config{
+		OllamaURL:    "http://localhost:11434",
+		ListenAddr:   ":9400",
+		PollInterval: 15 * time.Second,
+		LogLevel:     "info",
+		Proxy: ProxyConfig{
+			Enabled:    true,
+			ListenAddr: ":9401",
+		},
+	}
+}
+
+func (c *Config) validate() error {
+	if c.OllamaURL == "" {
+		return fmt.Errorf("ollama_url must not be empty")
+	}
+	if c.PollInterval < time.Second {
+		return fmt.Errorf("poll_interval must be >= 1s")
+	}
+	return nil
+}

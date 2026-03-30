@@ -1,0 +1,150 @@
+# ollama-exporter
+
+A production-grade Go Prometheus exporter for [Ollama](https://ollama.com) LLM inference.
+
+Exposes per-request inference metrics, model lifecycle events, and derived AI-specific
+signals that no existing exporter provides — built in pure Go with zero unnecessary
+dependencies, following node_exporter/blackbox_exporter conventions.
+
+## Why This Exists
+
+Ollama has no native `/metrics` endpoint. Existing community exporters are Python proxies
+or minimal Go stubs. None expose the semantic layer that matters for serious LLM
+observability: tokens-per-second by quantization level, KV cache pressure inference,
+model load/eviction event tracking, or in-flight concurrency.
+
+This exporter was designed from first principles for a local AI safety research stack,
+where inference signals need to correlate with behavioral probe results (Garak, SAE
+interpretability) in the same Grafana instance.
+
+## Design
+
+### Two Collection Modes
+
+**Poller** scrapes `/api/ps` and `/api/tags` on a configurable interval. Provides
+model inventory and VRAM state. Always-on baseline — survives proxy failures.
+
+**Proxy** sits transparently in front of Ollama. Your application points at the
+exporter instead of Ollama directly. The exporter intercepts request/response pairs,
+extracts Ollama's timing fields from the JSON body, records histogram observations,
+then forwards the original response downstream. Latency overhead: microseconds.
+
+If proxy health check fails, the exporter degrades gracefully to poller-only mode.
+Prometheus continues receiving model state metrics without interruption.
+
+### Metric Design
+
+- Namespace: `ollama_`
+- Quantization parsed from model tag into discrete label: `quant="q4_0"`
+- Model family parsed into label: `family="llama3"`
+- Histograms for latency (not summaries)
+- Derived metrics (TPS, KV pressure) computed at scrape time
+- Prompt text never appears in labels — no cardinality explosions
+
+### Key Metrics
+
+| Metric | Type | Description |
+|---|---|---|
+| `ollama_up` | Gauge | Ollama API health (1=up, 0=down) |
+| `ollama_model_loaded` | Gauge | 1 if model currently in VRAM |
+| `ollama_model_vram_bytes` | Gauge | VRAM consumed per loaded model |
+| `ollama_model_load_total` | Counter | Cumulative load events per model |
+| `ollama_model_unload_total` | Counter | Cumulative eviction events per model |
+| `ollama_request_duration_seconds` | Histogram | End-to-end request latency |
+| `ollama_load_duration_seconds` | Histogram | Model load time per request |
+| `ollama_prompt_eval_duration_seconds` | Histogram | Prompt evaluation time |
+| `ollama_eval_duration_seconds` | Histogram | Token generation time |
+| `ollama_tokens_per_second` | Gauge | Derived: eval_count / eval_duration |
+| `ollama_prompt_tokens_per_second` | Gauge | Derived: prompt_eval_count / prompt_eval_duration |
+| `ollama_requests_in_flight` | Gauge | Current concurrent requests (proxy mode) |
+| `ollama_requests_total` | Counter | Total requests by model and endpoint |
+| `ollama_kv_cache_pressure_ratio` | Gauge | Derived: prompt eval duration / token ratio trend |
+
+Full reference: [docs/metrics.md](docs/metrics.md)
+
+## Quick Start
+
+### Binary
+
+```bash
+go install github.com/maravexa/ollama-exporter/cmd/exporter@latest
+ollama-exporter --ollama-url http://localhost:11434 --listen :9400
+```
+
+### Docker
+
+```bash
+docker run -d \
+  -e OLLAMA_URL=http://host.docker.internal:11434 \
+  -p 9400:9400 \
+  ghcr.io/maravexa/ollama-exporter:latest
+```
+
+### Docker Compose (full PLG stack)
+
+```bash
+docker compose up -d
+```
+
+Includes: ollama-exporter, Prometheus, Grafana with pre-built dashboard.
+
+## Configuration
+
+```yaml
+# config.yaml
+ollama_url: "http://localhost:11434"
+listen_addr: ":9400"
+poll_interval: "15s"
+
+proxy:
+  enabled: true
+  # Your app points here instead of Ollama directly
+  listen_addr: ":9401"
+
+log_level: "info"  # debug | info | warn | error
+```
+
+All fields overridable via environment variables: `OLLAMA_URL`, `LISTEN_ADDR`, etc.
+
+## Prometheus Scrape Config
+
+```yaml
+scrape_configs:
+  - job_name: 'ollama'
+    static_configs:
+      - targets: ['localhost:9400']
+```
+
+## Security Properties
+
+- Pure Go — no CGo, statically linkable
+- Dependencies: stdlib + `prometheus/client_golang` only
+- Dockerfile: distroless/static base, runs as uid 65534 (nobody)
+- No dynamic code loading, no eval, no reflection-based config
+
+## Compatibility
+
+Tested against Ollama 0.3.x and 0.4.x on:
+- Linux (amd64, arm64)
+- Local inference: AMD RX 6700 XT (ROCm 6.3), NVIDIA (CUDA)
+
+## Architecture Context
+
+This exporter is part of a local AI safety observability stack:
+
+```
+Ollama (cyberdeck.vexa.heim:11434)
+  ↓
+ollama-exporter :9401 (proxy) / :9400 (metrics)
+  ↓
+Prometheus → Grafana
+  ↑
+garak-axis (LLM vulnerability + alignment displacement signals)
+SAELens (sparse autoencoder feature monitoring)
+```
+
+Inference metrics correlate with behavioral probe results in a single Grafana instance.
+
+## License
+
+MIT
