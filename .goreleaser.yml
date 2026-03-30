@@ -43,7 +43,7 @@ dockers:
   - image_templates:
       - "ghcr.io/maravexa/ollama-exporter:{{ .Tag }}"
       - "ghcr.io/maravexa/ollama-exporter:latest"
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile.release
     build_flag_templates:
       - "--label=org.opencontainers.image.version={{.Version}}"
       - "--label=org.opencontainers.image.source=https://github.com/maravexa/ollama-exporter"
