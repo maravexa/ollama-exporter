@@ -81,6 +81,8 @@ func (mc *ModelCache) fetch(ctx context.Context, model string) ModelInfo {
 // parseModelName extracts family and quantization labels from an Ollama model tag.
 // e.g. "llama3.1:8b-q4_0" → family="llama3", quant="q4_0"
 // Used as a fallback when /api/show is unavailable.
+//
+//nolint:unparam // quant used in fallback ModelInfo, future callers may use it
 func parseModelName(name string) (family, quant string) {
 	family = "unknown"
 	quant = "unknown"

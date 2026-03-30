@@ -10,11 +10,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
 	"github.com/maravexa/ollama-exporter/internal/config"
 	"github.com/maravexa/ollama-exporter/internal/metrics"
 	"github.com/maravexa/ollama-exporter/internal/ollama"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 // newTestPoller builds a Poller wired to a mock Ollama server.
@@ -167,4 +168,3 @@ func TestProxy_TPSDerivation(t *testing.T) {
 		t.Errorf("tokens_per_second = %v, want 50.0", tps)
 	}
 }
-

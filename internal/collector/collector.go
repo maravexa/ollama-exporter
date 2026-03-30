@@ -5,10 +5,11 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/maravexa/ollama-exporter/internal/config"
 	"github.com/maravexa/ollama-exporter/internal/metrics"
 	"github.com/maravexa/ollama-exporter/internal/ollama"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Collector owns both collection modes and their shared state.

@@ -89,4 +89,3 @@ func (p *Poller) scrape(ctx context.Context) {
 
 	p.prevLoaded = currentLoaded
 }
-

@@ -12,10 +12,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/maravexa/ollama-exporter/internal/collector"
-	"github.com/maravexa/ollama-exporter/internal/config"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"github.com/maravexa/ollama-exporter/internal/collector"
+	"github.com/maravexa/ollama-exporter/internal/config"
 )
 
 // Version is set at build time via ldflags: -X main.Version=<version>
