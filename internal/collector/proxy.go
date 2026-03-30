@@ -22,14 +22,16 @@ import (
 type Proxy struct {
 	cfg     *config.Config
 	metrics *metrics.Metrics
+	mc      *ModelCache
 	server  *http.Server
 }
 
 // NewProxy constructs a Proxy.
-func NewProxy(cfg *config.Config, _ *ollama.Client, m *metrics.Metrics) *Proxy {
+func NewProxy(cfg *config.Config, _ *ollama.Client, m *metrics.Metrics, mc *ModelCache) *Proxy {
 	return &Proxy{
 		cfg:     cfg,
 		metrics: m,
+		mc:      mc,
 	}
 }
 
@@ -78,9 +80,9 @@ func (p *Proxy) instrumentedHandler(next http.Handler) http.Handler {
 		start := time.Now()
 		next.ServeHTTP(w, r)
 
-		family, quant := parseModelName(model)
+		info := p.mc.Get(context.Background(), model)
 		p.metrics.RequestDuration.
-			WithLabelValues(model, family, quant, endpoint).
+			WithLabelValues(model, info.Family, info.Quant, endpoint).
 			Observe(time.Since(start).Seconds())
 	})
 }
@@ -123,8 +125,8 @@ func (p *Proxy) modifyResponse(resp *http.Response) error {
 	}
 	gen := final
 
-	family, quant := parseModelName(gen.Model)
-	labels := []string{gen.Model, family, quant}
+	info := p.mc.Get(context.Background(), gen.Model)
+	labels := []string{gen.Model, info.Family, info.Quant}
 
 	const nsToSec = 1e9
 

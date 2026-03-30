@@ -3,7 +3,6 @@ package collector
 import (
 	"context"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/maravexa/ollama-exporter/internal/config"
@@ -17,15 +16,17 @@ type Poller struct {
 	cfg        *config.Config
 	client     *ollama.Client
 	metrics    *metrics.Metrics
+	mc         *ModelCache
 	prevLoaded map[string]bool // tracks which models were loaded last tick
 }
 
 // NewPoller constructs a Poller.
-func NewPoller(cfg *config.Config, client *ollama.Client, m *metrics.Metrics) *Poller {
+func NewPoller(cfg *config.Config, client *ollama.Client, m *metrics.Metrics, mc *ModelCache) *Poller {
 	return &Poller{
 		cfg:        cfg,
 		client:     client,
 		metrics:    m,
+		mc:         mc,
 		prevLoaded: make(map[string]bool),
 	}
 }
@@ -63,8 +64,8 @@ func (p *Poller) scrape(ctx context.Context) {
 
 	currentLoaded := make(map[string]bool)
 	for _, m := range ps.Models {
-		family, quant := parseModelName(m.Name)
-		labels := []string{m.Name, family, quant}
+		info := p.mc.Get(ctx, m.Name)
+		labels := []string{m.Name, info.Family, info.Quant}
 
 		p.metrics.ModelLoaded.WithLabelValues(labels...).Set(1)
 		p.metrics.ModelVRAMBytes.WithLabelValues(labels...).Set(float64(m.SizeVRAM))
@@ -80,41 +81,12 @@ func (p *Poller) scrape(ctx context.Context) {
 	// Detect unloads: models present last tick but absent now.
 	for name := range p.prevLoaded {
 		if !currentLoaded[name] {
-			family, quant := parseModelName(name)
-			p.metrics.ModelLoaded.WithLabelValues(name, family, quant).Set(0)
-			p.metrics.ModelUnloadTotal.WithLabelValues(name, family, quant).Inc()
+			info := p.mc.Get(ctx, name)
+			p.metrics.ModelLoaded.WithLabelValues(name, info.Family, info.Quant).Set(0)
+			p.metrics.ModelUnloadTotal.WithLabelValues(name, info.Family, info.Quant).Inc()
 		}
 	}
 
 	p.prevLoaded = currentLoaded
 }
 
-// parseModelName extracts family and quantization labels from an Ollama model tag.
-// e.g. "llama3.1:8b-q4_0" → family="llama3", quant="q4_0"
-// TODO: expand pattern matching for all Ollama naming conventions.
-func parseModelName(name string) (family, quant string) {
-	family = "unknown"
-	quant = "unknown"
-
-	parts := strings.SplitN(name, ":", 2)
-	if len(parts) > 0 {
-		base := parts[0]
-		// Strip version suffixes like ".1", ".2" for family grouping.
-		if idx := strings.Index(base, "."); idx > 0 {
-			base = base[:idx]
-		}
-		family = base
-	}
-
-	if len(parts) == 2 {
-		tag := parts[1]
-		// Quantization appears after the last "-" in the tag.
-		if idx := strings.LastIndex(tag, "-"); idx >= 0 {
-			quant = tag[idx+1:]
-		} else {
-			quant = tag
-		}
-	}
-
-	return family, quant
-}
