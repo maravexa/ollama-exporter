@@ -1,0 +1,556 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Datasource",
+      "description": "Prometheus datasource for ollama-exporter metrics",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "10.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    }
+  ],
+  "title": "Ollama LLM Inference",
+  "uid": "ollama-inference-v1",
+  "tags": ["ollama", "llm", "inference", "ai"],
+  "timezone": "browser",
+  "refresh": "15s",
+  "schemaVersion": 38,
+  "version": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "label": "Datasource",
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "refresh": 1,
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Ollama Status",
+      "type": "stat",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 3 },
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "UP", "color": "green", "index": 0 } } },
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red", "index": 1 } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "ollama_up",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Model Loaded",
+      "type": "stat",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 3 },
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "IN VRAM", "color": "green", "index": 0 } } },
+            { "type": "value", "options": { "0": { "text": "UNLOADED", "color": "yellow", "index": 1 } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "yellow", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "ollama_model_loaded{job=\"ollama\"}",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "VRAM Usage",
+      "type": "stat",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 3 },
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "ollama_model_vram_bytes{job=\"ollama\"}",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Decode TPS",
+      "type": "stat",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 3 },
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "ollama_tokens_per_second{job=\"ollama\"}",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Prefill TPS",
+      "type": "stat",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 3 },
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "ollama_prompt_tokens_per_second{job=\"ollama\"}",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Total Requests",
+      "type": "stat",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 20, "y": 0, "w": 4, "h": 3 },
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "increase(ollama_requests_total{job=\"ollama\"}[24h])",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Decode vs Prefill Tokens Per Second",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 0, "y": 3, "w": 12, "h": 8 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "axisLabel": "tokens/sec",
+            "lineWidth": 1,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "ollama_tokens_per_second{job=\"ollama\"}",
+          "legendFormat": "{{model}} {{quant}} decode",
+          "refId": "A"
+        },
+        {
+          "datasource": "${datasource}",
+          "expr": "ollama_prompt_tokens_per_second{job=\"ollama\"}",
+          "legendFormat": "{{model}} {{quant}} prefill",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Request Duration Percentiles",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 12, "y": 3, "w": 12, "h": 8 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "histogram_quantile(0.50, rate(ollama_request_duration_seconds_bucket{job=\"ollama\",endpoint=\"/api/generate\"}[5m]))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "datasource": "${datasource}",
+          "expr": "histogram_quantile(0.95, rate(ollama_request_duration_seconds_bucket{job=\"ollama\",endpoint=\"/api/generate\"}[5m]))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "datasource": "${datasource}",
+          "expr": "histogram_quantile(0.99, rate(ollama_request_duration_seconds_bucket{job=\"ollama\",endpoint=\"/api/generate\"}[5m]))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Eval Duration p95 (decode phase)",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 0, "y": 11, "w": 8, "h": 8 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "histogram_quantile(0.95, rate(ollama_eval_duration_seconds_bucket{job=\"ollama\"}[5m]))",
+          "legendFormat": "{{model}} p95",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Prompt Eval Duration p95 (prefill phase)",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 8, "y": 11, "w": 8, "h": 8 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "histogram_quantile(0.95, rate(ollama_prompt_eval_duration_seconds_bucket{job=\"ollama\"}[5m]))",
+          "legendFormat": "{{model}} p95",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "KV Cache Pressure Ratio",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "description": "Rising values indicate degraded KV cache efficiency. Correlates with increasing context length.",
+      "gridPos": { "x": 16, "y": 11, "w": 8, "h": 8 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ns",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "ollama_kv_cache_pressure_ratio{job=\"ollama\"}",
+          "legendFormat": "{{model}} {{quant}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Model Load and Unload Events",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 0, "y": 19, "w": 8, "h": 6 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "increase(ollama_model_load_total{job=\"ollama\"}[5m])",
+          "legendFormat": "{{model}} loads",
+          "refId": "A"
+        },
+        {
+          "datasource": "${datasource}",
+          "expr": "increase(ollama_model_unload_total{job=\"ollama\"}[5m])",
+          "legendFormat": "{{model}} unloads",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Requests In Flight",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 8, "y": 19, "w": 8, "h": 6 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "ollama_requests_in_flight{job=\"ollama\",endpoint=\"/api/generate\"}",
+          "legendFormat": "{{model}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Request Rate",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 16, "y": 19, "w": 8, "h": 6 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "rate(ollama_requests_total{job=\"ollama\"}[5m])",
+          "legendFormat": "{{model}} {{endpoint}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
