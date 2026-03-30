@@ -1,7 +1,6 @@
 package collector
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -115,31 +114,23 @@ func (p *Proxy) modifyResponse(resp *http.Response) error {
 		return nil
 	}
 
-	var buf bytes.Buffer
-	var final ollama.GenerateResponse
-	var foundDone bool
-
-	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		buf.Write(line)
-		buf.WriteByte('\n')
-
-		var chunk ollama.GenerateResponse
-		if err := json.Unmarshal(line, &chunk); err == nil && chunk.Done {
-			final = chunk
-			foundDone = true
-		}
-	}
-	if err := scanner.Err(); err != nil {
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
 		return err
 	}
-	resp.Body = io.NopCloser(bytes.NewReader(buf.Bytes()))
 
-	if !foundDone {
+	// Always restore body and fix framing headers so the downstream client
+	// receives correct Content-Length regardless of whether the upstream used
+	// chunked transfer encoding or a fixed content-length.
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	resp.ContentLength = int64(len(body))
+	resp.TransferEncoding = nil // clear chunked encoding if set
+
+	var gen ollama.GenerateResponse
+	if err := json.Unmarshal(body, &gen); err != nil || !gen.Done {
 		return nil
 	}
-	gen := final
 
 	info := p.mc.Get(context.Background(), gen.Model)
 	labels := []string{gen.Model, info.Family, info.Quant}
