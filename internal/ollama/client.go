@@ -1,6 +1,7 @@
 package ollama
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -49,6 +50,32 @@ func (c *Client) Health(ctx context.Context) error {
 		return fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// Show calls POST /api/show and returns metadata for the given model.
+func (c *Client) Show(ctx context.Context, model string) (*ShowResponse, error) {
+	body, err := json.Marshal(map[string]string{"model": model})
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/show", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("do request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %d from /api/show", resp.StatusCode)
+	}
+	var result ShowResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return &result, nil
 }
 
 func get[T any](ctx context.Context, c *Client, path string) (*T, error) {

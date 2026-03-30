@@ -34,6 +34,18 @@ type LocalModel struct {
 	Digest     string    `json:"digest"`
 }
 
+// ShowResponse is the response from POST /api/show.
+type ShowResponse struct {
+	Details ModelDetails `json:"details"`
+}
+
+// ModelDetails contains metadata about a model returned by /api/show.
+type ModelDetails struct {
+	QuantizationLevel string `json:"quantization_level"`
+	Family            string `json:"family"`
+	ParameterSize     string `json:"parameter_size"`
+}
+
 // GenerateResponse is the final (done=true) chunk from /api/generate or /api/chat.
 // Timing fields are in nanoseconds.
 type GenerateResponse struct {

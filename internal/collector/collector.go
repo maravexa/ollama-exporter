@@ -24,12 +24,13 @@ type Collector struct {
 func New(cfg *config.Config, reg prometheus.Registerer) (*Collector, error) {
 	m := metrics.New(reg)
 	client := ollama.NewClient(cfg.OllamaURL)
+	mc := NewModelCache(client)
 
-	poller := NewPoller(cfg, client, m)
+	poller := NewPoller(cfg, client, m, mc)
 
 	var proxy *Proxy
 	if cfg.Proxy.Enabled {
-		proxy = NewProxy(cfg, client, m)
+		proxy = NewProxy(cfg, client, m, mc)
 	}
 
 	return &Collector{
