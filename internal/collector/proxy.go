@@ -77,13 +77,14 @@ func (p *Proxy) instrumentedHandler(next http.Handler) http.Handler {
 		if r.Method == http.MethodPost &&
 			(endpoint == "/api/generate" || endpoint == "/api/chat") &&
 			r.Body != nil {
-			body, err := io.ReadAll(r.Body)
-			r.Body = io.NopCloser(bytes.NewReader(body))
-			if err == nil {
+			bodyBytes, _ := io.ReadAll(r.Body)
+			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			r.ContentLength = int64(len(bodyBytes))
+			if len(bodyBytes) > 0 {
 				var req struct {
 					Model string `json:"model"`
 				}
-				if json.Unmarshal(body, &req) == nil && req.Model != "" {
+				if json.Unmarshal(bodyBytes, &req) == nil && req.Model != "" {
 					model = req.Model
 				}
 			}
