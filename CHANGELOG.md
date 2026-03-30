@@ -6,6 +6,13 @@ Versioning follows Semantic Versioning (https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-03-30
+
+### Fixed
+- Proxy: non-streaming responses (/api/chat stream:false) dropped connection
+  due to Content-Length mismatch and chunked Transfer-Encoding bleed-through
+- Proxy: bufio.Scanner replaced with io.ReadAll for response body handling
+
 ## [0.1.0] - 2026-03-30
 
 ### Added
