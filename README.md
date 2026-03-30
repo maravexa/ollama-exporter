@@ -73,12 +73,37 @@ ollama-exporter --ollama-url http://localhost:11434 --listen :9400
 
 ### Docker
 
+Linux (host.docker.internal requires --add-host flag):
+
+```bash
+docker run -d \
+  --add-host=host.docker.internal:host-gateway \
+  -e OLLAMA_URL=http://host.docker.internal:11434 \
+  -p 9400:9400 -p 9401:9401 \
+  ghcr.io/maravexa/ollama-exporter:latest
+```
+
+macOS / Windows (host.docker.internal resolves automatically):
+
 ```bash
 docker run -d \
   -e OLLAMA_URL=http://host.docker.internal:11434 \
-  -p 9400:9400 \
+  -p 9400:9400 -p 9401:9401 \
   ghcr.io/maravexa/ollama-exporter:latest
 ```
+
+Or use your host's LAN IP directly (works everywhere):
+
+```bash
+docker run -d \
+  -e OLLAMA_URL=http://192.168.1.x:11434 \
+  -p 9400:9400 -p 9401:9401 \
+  ghcr.io/maravexa/ollama-exporter:latest
+```
+
+Port reference:
+- 9400 — Prometheus metrics endpoint (`/metrics`)
+- 9401 — Transparent proxy (point your Ollama client here)
 
 ### Docker Compose (full PLG stack)
 
