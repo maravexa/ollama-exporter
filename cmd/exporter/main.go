@@ -18,7 +18,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+// Version is set at build time via ldflags: -X main.Version=<version>
+var Version = "dev"
+
 func main() {
+	slog.Info("starting ollama-exporter", "version", Version)
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	flag.Parse()
 
