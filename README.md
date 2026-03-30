@@ -133,7 +133,7 @@ Tested against Ollama 0.3.x and 0.4.x on:
 This exporter is part of a local AI safety observability stack:
 
 ```
-Ollama (cyberdeck.vexa.heim:11434)
+Ollama (:11434)
   ↓
 ollama-exporter :9401 (proxy) / :9400 (metrics)
   ↓
