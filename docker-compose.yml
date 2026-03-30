@@ -1,0 +1,30 @@
+services:
+  ollama-exporter:
+    build: .
+    ports:
+      - "9400:9400"   # metrics
+      - "9401:9401"   # proxy
+    environment:
+      OLLAMA_URL: "http://host.docker.internal:11434"
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus:/etc/prometheus
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+
+volumes:
+  grafana-data:
