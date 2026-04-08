@@ -157,15 +157,25 @@ Tested against Ollama 0.3.x and 0.4.x on:
 
 This exporter is part of a local AI safety observability stack:
 
-```
-Ollama (:11434)
-  ↓
-ollama-exporter :9401 (proxy) / :9400 (metrics)
-  ↓
-Prometheus → Grafana
-  ↑
-garak-axis (LLM vulnerability + alignment displacement signals)
-SAELens (sparse autoencoder feature monitoring)
+```mermaid
+flowchart TD
+    App["Your Application"]
+    Ollama["Ollama :11434"]
+    Proxy["ollama-exporter\n:9401 (proxy)"]
+    Metrics["ollama-exporter\n:9400 (/metrics)"]
+    Prom["Prometheus"]
+    Grafana["Grafana"]
+    Garak["garak-axis\nLLM vulnerability +\nalignment displacement signals"]
+    SAE["SAELens\nsparse autoencoder\nfeature monitoring"]
+
+    App -- "inference requests" --> Proxy
+    Proxy -- "forward + extract timings" --> Ollama
+    Proxy -- "per-request metrics" --> Metrics
+    Ollama -- "poll /api/ps & /api/tags" --> Metrics
+    Metrics -- "scrape" --> Prom
+    Garak -- "probe signals" --> Prom
+    SAE -- "feature signals" --> Prom
+    Prom --> Grafana
 ```
 
 Inference metrics correlate with behavioral probe results in a single Grafana instance.
