@@ -15,7 +15,6 @@ linters:
     - govet           # go vet checks
     - staticcheck     # comprehensive static analysis
     - unused          # unused code
-    - gosimple        # simplifications
     - ineffassign     # useless assignments
     - gosec           # security-oriented checks
     - misspell        # catches typos in comments and strings
