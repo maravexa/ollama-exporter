@@ -250,7 +250,7 @@ func discoverDevices(sysfsBase string) ([]device, error) {
 		}
 
 		name := fmt.Sprintf("amdgpu_card%d", idx)
-		if pn, err := readTrimmed(filepath.Join(devPath, "product_name")); err == nil && pn != "" {
+		if pn, pnErr := readTrimmed(filepath.Join(devPath, "product_name")); pnErr == nil && pn != "" {
 			name = pn
 		}
 

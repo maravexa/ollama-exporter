@@ -60,9 +60,8 @@ func (p *Proxy) Start(ctx context.Context) error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	go func() {
+	go func() { //nolint:gosec // G118: shutdown ctx must outlive the already-cancelled parent; using parent ctx would make Shutdown return immediately
 		<-ctx.Done()
-		//nolint:gosec // G118: shutdown context must be independent of the already-cancelled parent
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := p.server.Shutdown(shutCtx); err != nil {
@@ -152,7 +151,7 @@ func (p *Proxy) modifyResponse(resp *http.Response) error {
 
 	var gen ollama.GenerateResponse
 	if err := json.Unmarshal(body, &gen); err != nil {
-		return nil // non-Ollama or non-generate response; skip metric recording
+		return nil //nolint:nilerr // intentional: non-generate/streaming responses must not fail the proxy
 	}
 	if !gen.Done {
 		return nil
