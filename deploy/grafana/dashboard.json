@@ -37,11 +37,16 @@
   ],
   "title": "Ollama LLM Inference",
   "uid": "ollama-inference-v1",
-  "tags": ["ollama", "llm", "inference", "ai"],
+  "tags": [
+    "ollama",
+    "llm",
+    "inference",
+    "ai"
+  ],
   "timezone": "browser",
   "refresh": "15s",
   "schemaVersion": 38,
-  "version": 1,
+  "version": null,
   "templating": {
     "list": [
       {
@@ -77,10 +82,17 @@
       "title": "Ollama Status",
       "type": "stat",
       "datasource": "${datasource}",
-      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 3 },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 3
+      },
       "options": {
         "reduceOptions": {
-          "calcs": ["lastNotNull"]
+          "calcs": [
+            "lastNotNull"
+          ]
         },
         "orientation": "auto",
         "textMode": "auto",
@@ -91,17 +103,43 @@
       "fieldConfig": {
         "defaults": {
           "mappings": [
-            { "type": "value", "options": { "1": { "text": "UP", "color": "green", "index": 0 } } },
-            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red", "index": 1 } } }
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "UP",
+                  "color": "green",
+                  "index": 0
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 1
+                }
+              }
+            }
           ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
             ]
           },
-          "color": { "mode": "thresholds" }
+          "color": {
+            "mode": "thresholds"
+          }
         },
         "overrides": []
       },
@@ -119,10 +157,17 @@
       "title": "Model Loaded",
       "type": "stat",
       "datasource": "${datasource}",
-      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 3 },
+      "gridPos": {
+        "x": 4,
+        "y": 0,
+        "w": 4,
+        "h": 3
+      },
       "options": {
         "reduceOptions": {
-          "calcs": ["lastNotNull"]
+          "calcs": [
+            "lastNotNull"
+          ]
         },
         "orientation": "auto",
         "textMode": "auto",
@@ -133,17 +178,43 @@
       "fieldConfig": {
         "defaults": {
           "mappings": [
-            { "type": "value", "options": { "1": { "text": "IN VRAM", "color": "green", "index": 0 } } },
-            { "type": "value", "options": { "0": { "text": "UNLOADED", "color": "yellow", "index": 1 } } }
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "IN VRAM",
+                  "color": "green",
+                  "index": 0
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "UNLOADED",
+                  "color": "yellow",
+                  "index": 1
+                }
+              }
+            }
           ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "yellow", "value": null },
-              { "color": "green", "value": 1 }
+              {
+                "color": "yellow",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
             ]
           },
-          "color": { "mode": "thresholds" }
+          "color": {
+            "mode": "thresholds"
+          }
         },
         "overrides": []
       },
@@ -161,10 +232,17 @@
       "title": "VRAM Usage",
       "type": "stat",
       "datasource": "${datasource}",
-      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 3 },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 3
+      },
       "options": {
         "reduceOptions": {
-          "calcs": ["lastNotNull"]
+          "calcs": [
+            "lastNotNull"
+          ]
         },
         "orientation": "auto",
         "textMode": "auto",
@@ -178,10 +256,15 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null }
+              {
+                "color": "green",
+                "value": null
+              }
             ]
           },
-          "color": { "mode": "thresholds" }
+          "color": {
+            "mode": "thresholds"
+          }
         },
         "overrides": []
       },
@@ -199,10 +282,17 @@
       "title": "Decode TPS",
       "type": "stat",
       "datasource": "${datasource}",
-      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 3 },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 3
+      },
       "options": {
         "reduceOptions": {
-          "calcs": ["lastNotNull"]
+          "calcs": [
+            "lastNotNull"
+          ]
         },
         "orientation": "auto",
         "textMode": "auto",
@@ -216,10 +306,15 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null }
+              {
+                "color": "green",
+                "value": null
+              }
             ]
           },
-          "color": { "mode": "thresholds" }
+          "color": {
+            "mode": "thresholds"
+          }
         },
         "overrides": []
       },
@@ -237,10 +332,17 @@
       "title": "Prefill TPS",
       "type": "stat",
       "datasource": "${datasource}",
-      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 3 },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 4,
+        "h": 3
+      },
       "options": {
         "reduceOptions": {
-          "calcs": ["lastNotNull"]
+          "calcs": [
+            "lastNotNull"
+          ]
         },
         "orientation": "auto",
         "textMode": "auto",
@@ -254,10 +356,15 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null }
+              {
+                "color": "green",
+                "value": null
+              }
             ]
           },
-          "color": { "mode": "thresholds" }
+          "color": {
+            "mode": "thresholds"
+          }
         },
         "overrides": []
       },
@@ -275,10 +382,17 @@
       "title": "Total Requests",
       "type": "stat",
       "datasource": "${datasource}",
-      "gridPos": { "x": 20, "y": 0, "w": 4, "h": 3 },
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 3
+      },
       "options": {
         "reduceOptions": {
-          "calcs": ["lastNotNull"]
+          "calcs": [
+            "lastNotNull"
+          ]
         },
         "orientation": "auto",
         "textMode": "auto",
@@ -292,10 +406,15 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null }
+              {
+                "color": "green",
+                "value": null
+              }
             ]
           },
-          "color": { "mode": "thresholds" }
+          "color": {
+            "mode": "thresholds"
+          }
         },
         "overrides": []
       },
@@ -313,10 +432,21 @@
       "title": "Decode vs Prefill Tokens Per Second",
       "type": "timeseries",
       "datasource": "${datasource}",
-      "gridPos": { "x": 0, "y": 3, "w": 12, "h": 8 },
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 12,
+        "h": 8
+      },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -349,10 +479,21 @@
       "title": "Request Duration Percentiles",
       "type": "timeseries",
       "datasource": "${datasource}",
-      "gridPos": { "x": 12, "y": 3, "w": 12, "h": 8 },
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 12,
+        "h": 8
+      },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -390,10 +531,21 @@
       "title": "Eval Duration p95 (decode phase)",
       "type": "timeseries",
       "datasource": "${datasource}",
-      "gridPos": { "x": 0, "y": 11, "w": 8, "h": 8 },
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 8,
+        "h": 8
+      },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -419,10 +571,21 @@
       "title": "Prompt Eval Duration p95 (prefill phase)",
       "type": "timeseries",
       "datasource": "${datasource}",
-      "gridPos": { "x": 8, "y": 11, "w": 8, "h": 8 },
+      "gridPos": {
+        "x": 8,
+        "y": 11,
+        "w": 8,
+        "h": 8
+      },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -449,10 +612,21 @@
       "type": "timeseries",
       "datasource": "${datasource}",
       "description": "Rising values indicate degraded KV cache efficiency. Correlates with increasing context length.",
-      "gridPos": { "x": 16, "y": 11, "w": 8, "h": 8 },
+      "gridPos": {
+        "x": 16,
+        "y": 11,
+        "w": 8,
+        "h": 8
+      },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -478,10 +652,21 @@
       "title": "Model Load and Unload Events",
       "type": "timeseries",
       "datasource": "${datasource}",
-      "gridPos": { "x": 0, "y": 19, "w": 8, "h": 6 },
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 8,
+        "h": 6
+      },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -513,10 +698,21 @@
       "title": "Requests In Flight",
       "type": "timeseries",
       "datasource": "${datasource}",
-      "gridPos": { "x": 8, "y": 19, "w": 8, "h": 6 },
+      "gridPos": {
+        "x": 8,
+        "y": 19,
+        "w": 8,
+        "h": 6
+      },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -542,10 +738,21 @@
       "title": "Request Rate",
       "type": "timeseries",
       "datasource": "${datasource}",
-      "gridPos": { "x": 16, "y": 19, "w": 8, "h": 6 },
+      "gridPos": {
+        "x": 16,
+        "y": 19,
+        "w": 8,
+        "h": 6
+      },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -566,5 +773,6 @@
         }
       ]
     }
-  ]
+  ],
+  "id": null
 }
