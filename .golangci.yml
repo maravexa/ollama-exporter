@@ -1,5 +1,14 @@
 version: "2"
 
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/maravexa/ollama-exporter
+
 linters:
   enable:
     - errcheck        # unchecked errors
@@ -8,40 +17,31 @@ linters:
     - unused          # unused code
     - gosimple        # simplifications
     - ineffassign     # useless assignments
-    - gosec           # security-oriented checks (important for DevSecOps portfolio)
+    - gosec           # security-oriented checks
     - misspell        # catches typos in comments and strings
-    - gofmt           # formatting enforcement
-    - goimports       # import ordering
     - bodyclose       # unclosed HTTP response bodies (critical for proxy code)
-    - exportloopref   # loop variable capture bugs
     - nilerr          # returning nil when err is non-nil
     - unparam         # unused function parameters
     - prealloc        # slice preallocation suggestions
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-  govet:
-    enable:
-      - shadow         # catch variable shadowing
-  gosec:
-    excludes:
-      - G104           # unhandled errors (errcheck covers this better)
-  goimports:
-    local-prefixes: github.com/maravexa/ollama-exporter
-
-issues:
-  exclude-rules:
-    # Test files: relax errcheck (test assertions handle errors)
-    - path: _test\.go
-      linters:
-        - errcheck
-        - gosec
-    # Allow unchecked Write on http.ResponseWriter (standard Go pattern)
-    - linters:
-        - errcheck
-      text: "Error return value of `\\(net/http\\.ResponseWriter\\)\\.Write` is not checked"
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+      exclude-functions:
+        - (net/http.ResponseWriter).Write
+    govet:
+      enable:
+        - shadow       # catch variable shadowing
+    gosec:
+      excludes:
+        - G104         # unhandled errors (errcheck covers this better)
+  exclusions:
+    rules:
+      # Test files: relax errcheck and gosec (test assertions handle errors)
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
 
 run:
   timeout: 5m
