@@ -1,0 +1,21 @@
+[Unit]
+Description=Ollama Prometheus Exporter
+Documentation=https://github.com/maravexa/ollama-exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ollama-exporter
+Group=ollama-exporter
+ExecStart=/usr/bin/ollama-exporter --config /etc/ollama-exporter/config.yaml
+Restart=on-failure
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

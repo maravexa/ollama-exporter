@@ -1,0 +1,104 @@
+version: 2
+
+project_name: ollama-exporter
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: ollama-exporter
+    main: ./cmd/exporter
+    binary: ollama-exporter
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.Version={{.Version}}
+
+nfpms:
+  - id: ollama-exporter
+    package_name: ollama-exporter
+    builds:
+      - ollama-exporter
+    formats:
+      - deb
+      - rpm
+    maintainer: maravexa
+    description: Prometheus exporter for Ollama LLM inference
+    license: MIT
+    bindir: /usr/bin
+    contents:
+      - src: config.yaml
+        dst: /etc/ollama-exporter/config.yaml
+        type: config
+      - src: packaging/ollama-exporter.service
+        dst: /usr/lib/systemd/system/ollama-exporter.service
+    scripts:
+      postinstall: packaging/postinstall.sh
+      preremove: packaging/preremove.sh
+    dependencies:
+      - systemd
+
+archives:
+  - id: ollama-exporter
+    builds:
+      - ollama-exporter
+    format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+      - config.yaml.example
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  extra_files:
+    - glob: ./dist/*.deb
+    - glob: ./dist/*.rpm
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+dockers:
+  - id: amd64
+    image_templates:
+      - "ghcr.io/maravexa/ollama-exporter:{{ .Tag }}-amd64"
+    dockerfile: Dockerfile.release
+    use: buildx
+    goarch: amd64
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source=https://github.com/maravexa/ollama-exporter"
+  - id: arm64
+    image_templates:
+      - "ghcr.io/maravexa/ollama-exporter:{{ .Tag }}-arm64"
+    dockerfile: Dockerfile.release
+    use: buildx
+    goarch: arm64
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source=https://github.com/maravexa/ollama-exporter"
+
+docker_manifests:
+  - name_template: "ghcr.io/maravexa/ollama-exporter:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/maravexa/ollama-exporter:{{ .Tag }}-amd64"
+      - "ghcr.io/maravexa/ollama-exporter:{{ .Tag }}-arm64"
+  - name_template: "ghcr.io/maravexa/ollama-exporter:latest"
+    image_templates:
+      - "ghcr.io/maravexa/ollama-exporter:{{ .Tag }}-amd64"
+      - "ghcr.io/maravexa/ollama-exporter:{{ .Tag }}-arm64"
