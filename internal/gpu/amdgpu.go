@@ -225,7 +225,7 @@ func discoverDevices(sysfsBase string) ([]device, error) {
 		return nil, fmt.Errorf("glob %s/card*: %w", sysfsBase, err)
 	}
 
-	var devices []device
+	devices := make([]device, 0, len(entries))
 	for _, entry := range entries {
 		base := filepath.Base(entry)
 		if !isCardDir(base) {
