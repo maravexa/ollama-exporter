@@ -1,29 +1,47 @@
-run:
-  timeout: 5m
-  go: "1.22"
+version: "2"
 
 linters:
   enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
-    - gofmt
-    - goimports
-    - misspell
-    - unconvert
-    - unparam
-    - bodyclose
-    - noctx
+    - errcheck        # unchecked errors
+    - govet           # go vet checks
+    - staticcheck     # comprehensive static analysis
+    - unused          # unused code
+    - gosimple        # simplifications
+    - ineffassign     # useless assignments
+    - gosec           # security-oriented checks (important for DevSecOps portfolio)
+    - misspell        # catches typos in comments and strings
+    - gofmt           # formatting enforcement
+    - goimports       # import ordering
+    - bodyclose       # unclosed HTTP response bodies (critical for proxy code)
+    - exportloopref   # loop variable capture bugs
+    - nilerr          # returning nil when err is non-nil
+    - unparam         # unused function parameters
+    - prealloc        # slice preallocation suggestions
 
 linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  govet:
+    enable:
+      - shadow         # catch variable shadowing
+  gosec:
+    excludes:
+      - G104           # unhandled errors (errcheck covers this better)
   goimports:
     local-prefixes: github.com/maravexa/ollama-exporter
 
 issues:
   exclude-rules:
+    # Test files: relax errcheck (test assertions handle errors)
     - path: _test\.go
       linters:
         - errcheck
+        - gosec
+    # Allow unchecked Write on http.ResponseWriter (standard Go pattern)
+    - linters:
+        - errcheck
+      text: "Error return value of `\\(net/http\\.ResponseWriter\\)\\.Write` is not checked"
+
+run:
+  timeout: 5m
