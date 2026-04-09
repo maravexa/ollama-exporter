@@ -1,29 +1,47 @@
-run:
-  timeout: 5m
-  go: "1.22"
+version: "2"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/maravexa/ollama-exporter
 
 linters:
   enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
-    - gofmt
-    - goimports
-    - misspell
-    - unconvert
-    - unparam
-    - bodyclose
-    - noctx
+    - errcheck        # unchecked errors
+    - govet           # go vet checks
+    - staticcheck     # comprehensive static analysis
+    - unused          # unused code
+    - ineffassign     # useless assignments
+    - gosec           # security-oriented checks
+    - misspell        # catches typos in comments and strings
+    - bodyclose       # unclosed HTTP response bodies (critical for proxy code)
+    - nilerr          # returning nil when err is non-nil
+    - unparam         # unused function parameters
+    - prealloc        # slice preallocation suggestions
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+      exclude-functions:
+        - (net/http.ResponseWriter).Write
+        - (io.ReadCloser).Close
+    govet:
+      enable:
+        - shadow       # catch variable shadowing
+    gosec:
+      excludes:
+        - G104         # unhandled errors (errcheck covers this better)
+  exclusions:
+    rules:
+      # Test files: relax errcheck and gosec (test assertions handle errors)
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
 
-linters-settings:
-  goimports:
-    local-prefixes: github.com/maravexa/ollama-exporter
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
+run:
+  timeout: 5m

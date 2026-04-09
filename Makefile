@@ -2,9 +2,8 @@ BINARY_NAME=ollama-exporter
 MAIN_PATH=./cmd/exporter
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS=-ldflags "-X main.Version=$(VERSION) -s -w"
-GOLANGCI_VERSION=v1.57.2
 
-.PHONY: all build clean test vet lint run docker-build docker-push help
+.PHONY: all build clean test vet fmt lint vulncheck ci run docker-build docker-push coverage help
 
 all: vet lint test build
 
@@ -16,16 +15,23 @@ clean:
 	go clean ./...
 
 test:
-	go test -v -race -coverprofile=coverage.out ./...
+	go test -race -coverprofile=coverage.out -covermode=atomic ./...
+	go tool cover -func=coverage.out
 
 vet:
 	go vet ./...
 
+fmt:
+	@test -z "$$(gofmt -l .)" || (echo "Run gofmt -w ." && exit 1)
+
 lint:
-	@which golangci-lint > /dev/null 2>&1 || \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
-		| sh -s -- -b $(shell go env GOPATH)/bin $(GOLANGCI_VERSION)
-	golangci-lint run ./...
+	golangci-lint run --timeout=5m
+
+vulncheck:
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+ci: fmt vet lint test vulncheck
+	@echo "All CI checks passed"
 
 run: build
 	./$(BINARY_NAME)
@@ -42,9 +48,12 @@ coverage: test
 help:
 	@echo "Targets:"
 	@echo "  build        - compile binary"
-	@echo "  test         - run tests with race detector"
+	@echo "  test         - run tests with race detector and coverage"
 	@echo "  vet          - run go vet"
+	@echo "  fmt          - check formatting (use gofmt -w . to fix)"
 	@echo "  lint         - run golangci-lint"
+	@echo "  vulncheck    - run govulncheck for known vulnerabilities"
+	@echo "  ci           - run all CI checks locally (fmt vet lint test vulncheck)"
 	@echo "  run          - build and run locally"
 	@echo "  clean        - remove build artifacts"
 	@echo "  docker-build - build Docker image"

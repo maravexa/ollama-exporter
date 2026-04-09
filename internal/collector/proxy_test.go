@@ -38,7 +38,7 @@ func histSampleCount(t *testing.T, reg *prometheus.Registry, name string) uint64
 
 // newTestProxy builds a Proxy with the given exclude paths wired to a noop
 // show server (model cache falls back gracefully on 404).
-func newTestProxy(t *testing.T, excludePaths []string) (*Proxy, *metrics.Metrics, *prometheus.Registry) {
+func newTestProxy(t *testing.T, excludePaths []string) (*Proxy, *prometheus.Registry) {
 	t.Helper()
 
 	// Show server returns a valid response so model cache labels are populated.
@@ -69,7 +69,7 @@ func newTestProxy(t *testing.T, excludePaths []string) (*Proxy, *metrics.Metrics
 		mc:           mc,
 		excludePaths: excluded,
 	}
-	return proxy, m, reg
+	return proxy, reg
 }
 
 // noop is a trivial upstream handler that always returns 200.
@@ -79,7 +79,7 @@ var noop = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 func TestProxy_InferencePath_RecordsMetrics(t *testing.T) {
 	defaultExclude := []string{"/", "/api/ps", "/api/tags", "/api/show", "/api/version"}
-	proxy, _, reg := newTestProxy(t, defaultExclude)
+	proxy, reg := newTestProxy(t, defaultExclude)
 
 	handler := proxy.instrumentedHandler(noop)
 
@@ -97,7 +97,7 @@ func TestProxy_InferencePath_RecordsMetrics(t *testing.T) {
 
 func TestProxy_ExcludedInternalPath_DoesNotRecordMetrics(t *testing.T) {
 	defaultExclude := []string{"/", "/api/ps", "/api/tags", "/api/show", "/api/version"}
-	proxy, _, reg := newTestProxy(t, defaultExclude)
+	proxy, reg := newTestProxy(t, defaultExclude)
 
 	handler := proxy.instrumentedHandler(noop)
 
@@ -113,7 +113,7 @@ func TestProxy_ExcludedInternalPath_DoesNotRecordMetrics(t *testing.T) {
 
 func TestProxy_CustomExcludedPath_DoesNotRecordMetrics(t *testing.T) {
 	customExclude := []string{"/api/custom-health"}
-	proxy, _, reg := newTestProxy(t, customExclude)
+	proxy, reg := newTestProxy(t, customExclude)
 
 	handler := proxy.instrumentedHandler(noop)
 
@@ -130,7 +130,7 @@ func TestProxy_CustomExcludedPath_DoesNotRecordMetrics(t *testing.T) {
 func TestProxy_ExcludedPath_StillProxiesRequest(t *testing.T) {
 	// Ensure excluded paths are still forwarded to the upstream (not dropped).
 	defaultExclude := []string{"/", "/api/ps", "/api/tags", "/api/show", "/api/version"}
-	proxy, _, _ := newTestProxy(t, defaultExclude)
+	proxy, _ := newTestProxy(t, defaultExclude)
 
 	handler := proxy.instrumentedHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTeapot) // distinctive sentinel value

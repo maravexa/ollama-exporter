@@ -241,6 +241,29 @@ flowchart TD
 
 Inference metrics correlate with behavioral probe results in a single Grafana instance.
 
+## Development
+
+[![CI](https://github.com/maravexa/ollama-exporter/actions/workflows/ci.yaml/badge.svg)](https://github.com/maravexa/ollama-exporter/actions/workflows/ci.yaml)
+
+CI runs automatically on all PRs and pushes to main (lint, test with race detector,
+govulncheck reachability analysis, and cross-platform build verification).
+
+Run the full CI suite locally before pushing:
+
+```bash
+make ci
+```
+
+Run individual checks:
+
+```bash
+make lint       # golangci-lint
+make test       # go test -race with coverage report
+make vulncheck  # govulncheck reachability analysis
+make fmt        # verify gofmt formatting (non-destructive)
+make vet        # go vet
+```
+
 ## License
 
 MIT
