@@ -9,6 +9,12 @@ Versioning follows Semantic Versioning (https://semver.org/).
 ## [0.2.0] - 2026-04-09
 
 ### Added
+- AMD GPU metrics via sysfs: utilization, temperature, VRAM usage, power draw,
+  and clock speeds (`ollama_gpu_utilization_percent`, `ollama_gpu_temperature_celsius`,
+  `ollama_gpu_vram_used_bytes`, `ollama_gpu_vram_total_bytes`, `ollama_gpu_power_watts`,
+  `ollama_gpu_clock_mhz`). Works with the amdgpu kernel driver — no ROCm userspace
+  dependency required. Gracefully disabled when no AMD GPUs are found.
+- `gpu` config section with `enabled`, `poll_interval`, and `sysfs_base` fields.
 - `proxy.exclude_paths` config field: a user-configurable list of paths that bypass metric
   recording while still being forwarded upstream. Defaults to the five internal paths above.
 - Model load/unload lifecycle metrics: `ollama_model_load_events_total`,

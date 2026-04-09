@@ -63,6 +63,20 @@ Prometheus continues receiving model state metrics without interruption.
 | `ollama_requests_total` | Counter | Total requests by model and endpoint |
 | `ollama_kv_cache_pressure_ratio` | Gauge | Derived: prompt eval duration / token ratio trend |
 
+#### GPU Metrics (AMD, amdgpu driver)
+
+| Metric | Type | Description |
+|---|---|---|
+| `ollama_gpu_utilization_percent` | Gauge | GPU utilization 0–100, from `gpu_busy_percent` in sysfs |
+| `ollama_gpu_temperature_celsius` | Gauge | GPU temperature in °C, from hwmon `temp1_input` (millidegrees ÷ 1000) |
+| `ollama_gpu_vram_used_bytes` | Gauge | VRAM in use, from `mem_info_vram_used` |
+| `ollama_gpu_vram_total_bytes` | Gauge | Total VRAM, from `mem_info_vram_total` (cached at startup) |
+| `ollama_gpu_power_watts` | Gauge | Power draw in watts, from hwmon `power1_average` or `power1_input` (microwatts ÷ 1 000 000) |
+| `ollama_gpu_clock_mhz{type="gpu"}` | Gauge | Active GPU core clock in MHz, from `pp_dpm_sclk` |
+| `ollama_gpu_clock_mhz{type="memory"}` | Gauge | Active memory clock in MHz, from `pp_dpm_mclk` |
+
+All GPU metrics carry `gpu` (card index: "0", "1", …) and `name` (product name or "amdgpu_cardN") labels.
+
 Full reference: [docs/metrics.md](docs/metrics.md)
 
 ## Quick Start
@@ -137,6 +151,11 @@ proxy:
     - "/api/show"
     - "/api/version"
 
+gpu:
+  enabled: true
+  # poll_interval: "5s"           # separate GPU poll interval; inherits poll_interval if unset
+  # sysfs_base: /sys/class/drm   # override for testing
+
 log_level: "info"  # debug | info | warn | error
 ```
 
@@ -150,6 +169,37 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9400']
 ```
+
+## GPU Metrics
+
+The exporter collects AMD GPU hardware metrics directly from the Linux kernel's
+sysfs interface exposed by the **amdgpu** driver. **No ROCm installation is
+required** — `rocm-smi`, `amd-smi`, and all ROCm userspace packages are
+completely absent from the dependency tree.
+
+### How It Works
+
+On startup the exporter scans `/sys/class/drm/card*` for directories whose
+`device/vendor` file contains AMD's vendor ID (`0x1002`). For each discovered
+GPU it resolves the hwmon subdirectory once (the kernel-assigned hwmon index
+varies across boots) and caches the total VRAM. Subsequent poll cycles read the
+remaining sysfs files and emit Prometheus gauges.
+
+Each sysfs read is independently failable: if a file is absent or contains
+unexpected content (e.g. `gpu_busy_percent` returns `ENOTSUP` on some older
+cards), that metric is skipped for the current cycle and a debug-level log line
+is emitted. All other metrics continue unaffected.
+
+### Access Requirements
+
+All paths under `/sys/class/drm/` are world-readable by default on Linux —
+no special capabilities or sudo are needed to run the exporter.
+
+### Disabling GPU Collection
+
+Set `gpu.enabled: false` in `config.yaml` to disable GPU metric collection
+entirely. The exporter also disables GPU metrics automatically (with a warning)
+when no AMD GPUs are found at startup.
 
 ## Security Properties
 
