@@ -10,10 +10,13 @@ type Metrics struct {
 	Up *prometheus.GaugeVec
 
 	// Model lifecycle
-	ModelLoaded      *prometheus.GaugeVec
-	ModelVRAMBytes   *prometheus.GaugeVec
-	ModelLoadTotal   *prometheus.CounterVec
-	ModelUnloadTotal *prometheus.CounterVec
+	ModelLoaded             *prometheus.GaugeVec
+	ModelVRAMBytes          *prometheus.GaugeVec
+	ModelLoadTotal          *prometheus.CounterVec
+	ModelUnloadTotal        *prometheus.CounterVec
+	ModelLoadEventsTotal    *prometheus.CounterVec
+	ModelUnloadEventsTotal  *prometheus.CounterVec
+	ModelLoadDurationSeconds *prometheus.HistogramVec
 
 	// Per-request inference (proxy mode)
 	RequestDuration      *prometheus.HistogramVec
@@ -59,6 +62,25 @@ func New(reg prometheus.Registerer) *Metrics {
 			Name:      "model_unload_total",
 			Help:      "Cumulative number of times this model has been evicted from VRAM.",
 		}, []string{"model", "family", "quant"}),
+
+		ModelLoadEventsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: "ollama",
+			Name:      "model_load_events_total",
+			Help:      "Number of model load transitions detected since exporter startup. Not incremented for models already loaded at startup.",
+		}, []string{"model"}),
+
+		ModelUnloadEventsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: "ollama",
+			Name:      "model_unload_events_total",
+			Help:      "Number of model unload transitions detected since exporter startup.",
+		}, []string{"model"}),
+
+		ModelLoadDurationSeconds: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: "ollama",
+			Name:      "model_load_duration_seconds",
+			Help:      "Time spent loading a model, sourced from the load_duration field in proxied /api/generate and /api/chat responses.",
+			Buckets:   []float64{0.5, 1, 2, 5, 10, 20, 30, 60, 120},
+		}, []string{"model"}),
 
 		RequestDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Namespace: "ollama",
@@ -125,6 +147,9 @@ func New(reg prometheus.Registerer) *Metrics {
 		m.ModelVRAMBytes,
 		m.ModelLoadTotal,
 		m.ModelUnloadTotal,
+		m.ModelLoadEventsTotal,
+		m.ModelUnloadEventsTotal,
+		m.ModelLoadDurationSeconds,
 		m.RequestDuration,
 		m.LoadDuration,
 		m.PromptEvalDuration,

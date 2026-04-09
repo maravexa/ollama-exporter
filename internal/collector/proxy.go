@@ -156,6 +156,8 @@ func (p *Proxy) modifyResponse(resp *http.Response) error {
 	if gen.LoadDuration > 0 {
 		p.metrics.LoadDuration.WithLabelValues(labels...).
 			Observe(float64(gen.LoadDuration) / nsToSec)
+		p.metrics.ModelLoadDurationSeconds.WithLabelValues(gen.Model).
+			Observe(float64(gen.LoadDuration) / nsToSec)
 	}
 	if gen.PromptEvalDuration > 0 {
 		p.metrics.PromptEvalDuration.WithLabelValues(labels...).

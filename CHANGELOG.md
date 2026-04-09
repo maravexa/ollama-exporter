@@ -8,14 +8,21 @@ Versioning follows Semantic Versioning (https://semver.org/).
 
 ## [0.2.0] - 2026-04-09
 
+### Added
+- `proxy.exclude_paths` config field: a user-configurable list of paths that bypass metric
+  recording while still being forwarded upstream. Defaults to the five internal paths above.
+- Model load/unload lifecycle metrics: `ollama_model_load_events_total`,
+  `ollama_model_unload_events_total`, `ollama_model_loaded` gauge,
+  `ollama_model_vram_bytes`, and `ollama_model_load_duration_seconds` histogram.
+  Load/unload events are only counted for transitions observed after startup —
+  models present at first scrape are treated as already loaded and do not fire counters.
+
 ### Fixed
 - Filtered internal proxy calls (`/api/ps`, `/api/tags`, `/api/show`, `/api/version`, `/`)
   from `ollama_request_duration_seconds` and related per-request metrics to reduce label
   cardinality noise; these paths still proxy through to Ollama normally.
-
-### Added
-- `proxy.exclude_paths` config field: a user-configurable list of paths that bypass metric
-  recording while still being forwarded upstream. Defaults to the five internal paths above.
+- VRAM gauge (`ollama_model_vram_bytes`) now resets to 0 on model unload instead of
+  retaining the last observed value.
 
 ## [0.1.1] - 2026-03-30
 
