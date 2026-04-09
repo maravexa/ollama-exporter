@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/maravexa/ollama-exporter/internal/config"
@@ -13,11 +14,14 @@ import (
 // Poller scrapes /api/ps and /api/tags on a fixed interval,
 // tracking model lifecycle events and VRAM state.
 type Poller struct {
-	cfg        *config.Config
-	client     *ollama.Client
-	metrics    *metrics.Metrics
-	mc         *ModelCache
-	prevLoaded map[string]bool // tracks which models were loaded last tick
+	cfg     *config.Config
+	client  *ollama.Client
+	metrics *metrics.Metrics
+	mc      *ModelCache
+
+	mu          sync.RWMutex    // protects prevLoaded and initialized
+	prevLoaded  map[string]bool // tracks which models were loaded last tick
+	initialized bool            // true after the first successful scrape
 }
 
 // NewPoller constructs a Poller.
@@ -62,6 +66,9 @@ func (p *Poller) scrape(ctx context.Context) {
 		return
 	}
 
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	currentLoaded := make(map[string]bool)
 	for _, m := range ps.Models {
 		info := p.mc.Get(ctx, m.Name)
@@ -73,8 +80,15 @@ func (p *Poller) scrape(ctx context.Context) {
 		currentLoaded[m.Name] = true
 
 		if !p.prevLoaded[m.Name] {
-			// Model newly appeared — increment load counter.
+			// Model newly appeared — increment the cumulative load counter.
 			p.metrics.ModelLoadTotal.WithLabelValues(labels...).Inc()
+
+			// Only fire the lifecycle events counter after the first scrape.
+			// On startup we don't know when the model was loaded, so we treat
+			// whatever is present as already loaded and skip the event.
+			if p.initialized {
+				p.metrics.ModelLoadEventsTotal.WithLabelValues(m.Name).Inc()
+			}
 		}
 	}
 
@@ -83,9 +97,12 @@ func (p *Poller) scrape(ctx context.Context) {
 		if !currentLoaded[name] {
 			info := p.mc.Get(ctx, name)
 			p.metrics.ModelLoaded.WithLabelValues(name, info.Family, info.Quant).Set(0)
+			p.metrics.ModelVRAMBytes.WithLabelValues(name, info.Family, info.Quant).Set(0)
 			p.metrics.ModelUnloadTotal.WithLabelValues(name, info.Family, info.Quant).Inc()
+			p.metrics.ModelUnloadEventsTotal.WithLabelValues(name).Inc()
 		}
 	}
 
 	p.prevLoaded = currentLoaded
+	p.initialized = true
 }

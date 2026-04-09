@@ -46,12 +46,15 @@ Prometheus continues receiving model state metrics without interruption.
 | Metric | Type | Description |
 |---|---|---|
 | `ollama_up` | Gauge | Ollama API health (1=up, 0=down) |
-| `ollama_model_loaded` | Gauge | 1 if model currently in VRAM |
-| `ollama_model_vram_bytes` | Gauge | VRAM consumed per loaded model |
-| `ollama_model_load_total` | Counter | Cumulative load events per model |
+| `ollama_model_loaded` | Gauge | 1 if model currently in VRAM, 0 after unload |
+| `ollama_model_vram_bytes` | Gauge | VRAM consumed per loaded model; resets to 0 on unload |
+| `ollama_model_load_total` | Counter | Cumulative load events per model (including startup) |
 | `ollama_model_unload_total` | Counter | Cumulative eviction events per model |
+| `ollama_model_load_events_total` | Counter | Load transitions observed after startup (excludes models present at launch) |
+| `ollama_model_unload_events_total` | Counter | Unload transitions observed after startup |
+| `ollama_model_load_duration_seconds` | Histogram | Model load time from proxied response `load_duration` field |
 | `ollama_request_duration_seconds` | Histogram | End-to-end request latency |
-| `ollama_load_duration_seconds` | Histogram | Model load time per request |
+| `ollama_load_duration_seconds` | Histogram | Per-request model load time (model/family/quant labels) |
 | `ollama_prompt_eval_duration_seconds` | Histogram | Prompt evaluation time |
 | `ollama_eval_duration_seconds` | Histogram | Token generation time |
 | `ollama_tokens_per_second` | Gauge | Derived: eval_count / eval_duration |
@@ -125,6 +128,14 @@ proxy:
   enabled: true
   # Your app points here instead of Ollama directly
   listen_addr: ":9401"
+  # Paths forwarded normally but excluded from metric recording.
+  # Prevents internal polling calls from inflating inference histograms.
+  exclude_paths:
+    - "/"
+    - "/api/ps"
+    - "/api/tags"
+    - "/api/show"
+    - "/api/version"
 
 log_level: "info"  # debug | info | warn | error
 ```

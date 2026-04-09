@@ -5,5 +5,14 @@ poll_interval: "15s"
 proxy:
   enabled: true
   listen_addr: ":9401"
+  # Paths for which the proxy forwards traffic normally but skips all
+  # Prometheus metric recording. The defaults suppress internal polling
+  # calls that would otherwise inflate inference histogram cardinality.
+  exclude_paths:
+    - "/"
+    - "/api/ps"
+    - "/api/tags"
+    - "/api/show"
+    - "/api/version"
 
 log_level: "info"
