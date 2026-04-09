@@ -256,7 +256,10 @@ func discoverDevices(sysfsBase string) ([]device, error) {
 
 		hwmon := resolveHwmon(devPath)
 
-		vramTotal, _ := readUint64File(filepath.Join(devPath, "mem_info_vram_total"))
+		vramTotal, err := readUint64File(filepath.Join(devPath, "mem_info_vram_total"))
+		if err != nil {
+			slog.Debug("gpu: mem_info_vram_total unavailable at startup", "path", devPath, "err", err)
+		}
 
 		devices = append(devices, device{
 			index:     idx,
@@ -314,7 +317,7 @@ func resolveHwmon(devPath string) string {
 //	1: 1000Mhz
 //	2: 1750Mhz *
 func parseDPMFile(path string) (int, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: path constructed from trusted sysfs base
 	if err != nil {
 		return 0, err
 	}
@@ -360,7 +363,7 @@ func readUint64File(path string) (uint64, error) {
 // readTrimmed reads a file and returns its content with surrounding whitespace
 // stripped. Sysfs files typically end with a newline.
 func readTrimmed(path string) (string, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: path constructed from trusted sysfs base
 	if err != nil {
 		return "", err
 	}

@@ -55,15 +55,19 @@ func (p *Proxy) Start(ctx context.Context) error {
 	mux.Handle("/", p.instrumentedHandler(rp))
 
 	p.server = &http.Server{
-		Addr:    p.cfg.Proxy.ListenAddr,
-		Handler: mux,
+		Addr:              p.cfg.Proxy.ListenAddr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go func() {
 		<-ctx.Done()
+		//nolint:gosec // G118: shutdown context must be independent of the already-cancelled parent
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = p.server.Shutdown(shutCtx)
+		if err := p.server.Shutdown(shutCtx); err != nil {
+			slog.Error("proxy shutdown", "err", err)
+		}
 	}()
 
 	slog.Info("proxy listening", "addr", p.cfg.Proxy.ListenAddr, "upstream", p.cfg.OllamaURL)
@@ -86,7 +90,10 @@ func (p *Proxy) instrumentedHandler(next http.Handler) http.Handler {
 		if r.Method == http.MethodPost &&
 			(endpoint == "/api/generate" || endpoint == "/api/chat") &&
 			r.Body != nil {
-			bodyBytes, _ := io.ReadAll(r.Body)
+			bodyBytes, err := io.ReadAll(r.Body)
+			if err != nil {
+				slog.Debug("proxy: failed to read request body", "err", err)
+			}
 			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 			r.ContentLength = int64(len(bodyBytes))
 			if len(bodyBytes) > 0 {
@@ -144,12 +151,16 @@ func (p *Proxy) modifyResponse(resp *http.Response) error {
 	resp.TransferEncoding = nil // clear chunked encoding if set
 
 	var gen ollama.GenerateResponse
-	if err := json.Unmarshal(body, &gen); err != nil || !gen.Done {
+	if err := json.Unmarshal(body, &gen); err != nil {
+		return nil // non-Ollama or non-generate response; skip metric recording
+	}
+	if !gen.Done {
 		return nil
 	}
 
 	info := p.mc.Get(context.Background(), gen.Model)
-	labels := []string{gen.Model, info.Family, info.Quant}
+	labels := make([]string, 0, 4)
+	labels = append(labels, gen.Model, info.Family, info.Quant)
 
 	const nsToSec = 1e9
 

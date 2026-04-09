@@ -24,13 +24,13 @@ func buildMockSysfs(t *testing.T) string {
 	mustWriteFile(t, filepath.Join(devPath, "vendor"), "0x1002\n")
 	mustWriteFile(t, filepath.Join(devPath, "product_name"), "AMD Radeon RX 6700 XT\n")
 	mustWriteFile(t, filepath.Join(devPath, "gpu_busy_percent"), "42\n")
-	mustWriteFile(t, filepath.Join(devPath, "mem_info_vram_used"), "4294967296\n")  // 4 GiB
+	mustWriteFile(t, filepath.Join(devPath, "mem_info_vram_used"), "4294967296\n")   // 4 GiB
 	mustWriteFile(t, filepath.Join(devPath, "mem_info_vram_total"), "12884901888\n") // 12 GiB
 
 	// hwmon subtree (index 3 as the kernel might assign).
 	hwmon := filepath.Join(devPath, "hwmon", "hwmon3")
 	mustMkdir(t, hwmon)
-	mustWriteFile(t, filepath.Join(hwmon, "temp1_input"), "65000\n")    // 65 °C in millidegrees
+	mustWriteFile(t, filepath.Join(hwmon, "temp1_input"), "65000\n")        // 65 °C in millidegrees
 	mustWriteFile(t, filepath.Join(hwmon, "power1_average"), "120000000\n") // 120 W in microwatts
 
 	// DPM clock files.
@@ -59,14 +59,14 @@ func mustWriteFile(t *testing.T, path, content string) {
 
 // newTestCollector builds a Collector backed by a mock sysfs root and a fresh
 // Prometheus registry.
-func newTestCollector(t *testing.T, sysfsRoot string) (*Collector, *prometheus.Registry) {
+func newTestCollector(t *testing.T, sysfsRoot string) *Collector {
 	t.Helper()
 	reg := prometheus.NewRegistry()
 	col, err := NewCollector(Config{Enabled: true, SysfsBase: sysfsRoot}, reg)
 	if err != nil {
 		t.Fatalf("NewCollector: %v", err)
 	}
-	return col, reg
+	return col
 }
 
 // ─── device discovery ─────────────────────────────────────────────────────────
@@ -180,7 +180,7 @@ func TestDiscoverDevices_MultipleGPUs(t *testing.T) {
 
 func TestCollect_AllMetrics(t *testing.T) {
 	root := buildMockSysfs(t)
-	col, _ := newTestCollector(t, root)
+	col := newTestCollector(t, root)
 
 	if len(col.devices) != 1 {
 		t.Fatalf("want 1 device, got %d", len(col.devices))
@@ -207,7 +207,7 @@ func TestCollect_MissingFiles_NocrashNoPanic(t *testing.T) {
 	mustMkdir(t, devPath)
 	mustWriteFile(t, filepath.Join(devPath, "vendor"), "0x1002\n")
 
-	col, _ := newTestCollector(t, root)
+	col := newTestCollector(t, root)
 
 	// Should complete without panic.
 	col.collect()
@@ -229,7 +229,7 @@ func TestCollect_MalformedFiles_NoCrash(t *testing.T) {
 	mustWriteFile(t, filepath.Join(hwmon, "temp1_input"), "not-a-number\n")
 	mustWriteFile(t, filepath.Join(hwmon, "power1_average"), "bad\n")
 
-	col, _ := newTestCollector(t, root)
+	col := newTestCollector(t, root)
 	col.collect() // must not panic
 }
 
@@ -240,7 +240,7 @@ func TestCollect_NoAMDGPUs_Disabled(t *testing.T) {
 	mustMkdir(t, devPath)
 	mustWriteFile(t, filepath.Join(devPath, "vendor"), "0x10de\n") // NVIDIA
 
-	col, _ := newTestCollector(t, root)
+	col := newTestCollector(t, root)
 	if len(col.devices) != 0 {
 		t.Errorf("want 0 devices for non-AMD GPU, got %d", len(col.devices))
 	}
@@ -259,7 +259,7 @@ func TestCollect_PowerFallback(t *testing.T) {
 	mustMkdir(t, hwmon)
 	mustWriteFile(t, filepath.Join(hwmon, "power1_input"), "85000000\n") // 85 W, no power1_average
 
-	col, _ := newTestCollector(t, root)
+	col := newTestCollector(t, root)
 	col.collect()
 
 	assertGauge(t, col.m.Power, []string{"0", "amdgpu_card0"}, 85.0, "power fallback")
@@ -268,7 +268,7 @@ func TestCollect_PowerFallback(t *testing.T) {
 func TestCollect_VRAMTotalCached(t *testing.T) {
 	// vram_total should be emitted even if the file is deleted after startup.
 	root := buildMockSysfs(t)
-	col, _ := newTestCollector(t, root)
+	col := newTestCollector(t, root)
 
 	// Remove the file to simulate it being unavailable at poll time.
 	if err := os.Remove(filepath.Join(root, "card0", "device", "mem_info_vram_total")); err != nil {

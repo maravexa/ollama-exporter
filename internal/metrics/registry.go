@@ -10,12 +10,12 @@ type Metrics struct {
 	Up *prometheus.GaugeVec
 
 	// Model lifecycle
-	ModelLoaded             *prometheus.GaugeVec
-	ModelVRAMBytes          *prometheus.GaugeVec
-	ModelLoadTotal          *prometheus.CounterVec
-	ModelUnloadTotal        *prometheus.CounterVec
-	ModelLoadEventsTotal    *prometheus.CounterVec
-	ModelUnloadEventsTotal  *prometheus.CounterVec
+	ModelLoaded              *prometheus.GaugeVec
+	ModelVRAMBytes           *prometheus.GaugeVec
+	ModelLoadTotal           *prometheus.CounterVec
+	ModelUnloadTotal         *prometheus.CounterVec
+	ModelLoadEventsTotal     *prometheus.CounterVec
+	ModelUnloadEventsTotal   *prometheus.CounterVec
 	ModelLoadDurationSeconds *prometheus.HistogramVec
 
 	// Per-request inference (proxy mode)

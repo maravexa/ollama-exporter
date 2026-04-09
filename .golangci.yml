@@ -28,6 +28,7 @@ linters:
       check-blank: true
       exclude-functions:
         - (net/http.ResponseWriter).Write
+        - (io.ReadCloser).Close
     govet:
       enable:
         - shadow       # catch variable shadowing
