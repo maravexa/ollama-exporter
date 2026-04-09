@@ -21,8 +21,26 @@ type Config struct {
 	// Proxy holds proxy mode configuration.
 	Proxy ProxyConfig
 
+	// GPU holds AMD GPU hardware metric collection configuration.
+	GPU GPUConfig
+
 	// LogLevel controls structured log verbosity.
 	LogLevel string
+}
+
+// GPUConfig holds configuration for AMD GPU hardware metric collection via sysfs.
+// No ROCm userspace packages are required — only the amdgpu kernel driver.
+type GPUConfig struct {
+	// Enabled activates GPU metric collection via the amdgpu sysfs interface.
+	Enabled bool
+
+	// PollInterval controls how often GPU metrics are read from sysfs.
+	// If zero, the main PollInterval is used.
+	PollInterval time.Duration
+
+	// SysfsBase is the root of the DRM sysfs tree.
+	// Defaults to /sys/class/drm. Override for testing.
+	SysfsBase string
 }
 
 // ProxyConfig holds configuration for the transparent proxy mode.
@@ -77,6 +95,10 @@ func defaults() *Config {
 				"/api/show",
 				"/api/version",
 			},
+		},
+		GPU: GPUConfig{
+			Enabled:   true,
+			SysfsBase: "/sys/class/drm",
 		},
 	}
 }
