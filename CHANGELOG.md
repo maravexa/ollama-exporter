@@ -6,6 +6,17 @@ Versioning follows Semantic Versioning (https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-09
+
+### Fixed
+- Filtered internal proxy calls (`/api/ps`, `/api/tags`, `/api/show`, `/api/version`, `/`)
+  from `ollama_request_duration_seconds` and related per-request metrics to reduce label
+  cardinality noise; these paths still proxy through to Ollama normally.
+
+### Added
+- `proxy.exclude_paths` config field: a user-configurable list of paths that bypass metric
+  recording while still being forwarded upstream. Defaults to the five internal paths above.
+
 ## [0.1.1] - 2026-03-30
 
 ### Fixed

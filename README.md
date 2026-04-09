@@ -125,6 +125,14 @@ proxy:
   enabled: true
   # Your app points here instead of Ollama directly
   listen_addr: ":9401"
+  # Paths forwarded normally but excluded from metric recording.
+  # Prevents internal polling calls from inflating inference histograms.
+  exclude_paths:
+    - "/"
+    - "/api/ps"
+    - "/api/tags"
+    - "/api/show"
+    - "/api/version"
 
 log_level: "info"  # debug | info | warn | error
 ```

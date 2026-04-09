@@ -32,6 +32,12 @@ type ProxyConfig struct {
 
 	// ListenAddr is the address the proxy HTTP server binds to.
 	ListenAddr string
+
+	// ExcludePaths is a list of request paths for which the proxy will
+	// forward traffic but skip all Prometheus metric recording. Use this
+	// to suppress noise from internal polling calls (/api/ps, /api/tags,
+	// etc.) that would otherwise inflate label cardinality.
+	ExcludePaths []string
 }
 
 // Load reads configuration from the given YAML file path,
@@ -64,6 +70,13 @@ func defaults() *Config {
 		Proxy: ProxyConfig{
 			Enabled:    true,
 			ListenAddr: ":9401",
+			ExcludePaths: []string{
+				"/",
+				"/api/ps",
+				"/api/tags",
+				"/api/show",
+				"/api/version",
+			},
 		},
 	}
 }

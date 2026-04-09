@@ -19,18 +19,25 @@ import (
 // Proxy is a transparent HTTP reverse proxy that intercepts Ollama API
 // traffic and extracts per-request inference metrics from response bodies.
 type Proxy struct {
-	cfg     *config.Config
-	metrics *metrics.Metrics
-	mc      *ModelCache
-	server  *http.Server
+	cfg          *config.Config
+	metrics      *metrics.Metrics
+	mc           *ModelCache
+	server       *http.Server
+	excludePaths map[string]struct{}
 }
 
-// NewProxy constructs a Proxy.
+// NewProxy constructs a Proxy. It pre-builds an O(1) lookup set from
+// cfg.Proxy.ExcludePaths so the hot path in the request handler is fast.
 func NewProxy(cfg *config.Config, _ *ollama.Client, m *metrics.Metrics, mc *ModelCache) *Proxy {
+	excluded := make(map[string]struct{}, len(cfg.Proxy.ExcludePaths))
+	for _, p := range cfg.Proxy.ExcludePaths {
+		excluded[p] = struct{}{}
+	}
 	return &Proxy{
-		cfg:     cfg,
-		metrics: m,
-		mc:      mc,
+		cfg:          cfg,
+		metrics:      m,
+		mc:           mc,
+		excludePaths: excluded,
 	}
 }
 
@@ -68,6 +75,9 @@ func (p *Proxy) Start(ctx context.Context) error {
 
 // instrumentedHandler wraps the reverse proxy to track in-flight requests
 // and end-to-end latency before the response body is inspected.
+// Requests whose path appears in p.excludePaths are proxied normally but
+// generate no Prometheus observations, preventing internal polling calls
+// from polluting inference histograms.
 func (p *Proxy) instrumentedHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		model := r.URL.Query().Get("model")
@@ -87,6 +97,12 @@ func (p *Proxy) instrumentedHandler(next http.Handler) http.Handler {
 					model = req.Model
 				}
 			}
+		}
+
+		_, excluded := p.excludePaths[endpoint]
+		if excluded {
+			next.ServeHTTP(w, r)
+			return
 		}
 
 		p.metrics.RequestsInFlight.WithLabelValues(model, endpoint).Inc()
