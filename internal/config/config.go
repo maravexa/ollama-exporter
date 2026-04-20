@@ -68,7 +68,7 @@ type ProxyConfig struct {
 func Load(path string) (*Config, error) {
 	cfg := defaults()
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is operator-supplied via --config flag
 	if err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("reading config %s: %w", path, err)
 	}
