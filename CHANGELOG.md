@@ -6,6 +6,28 @@ Versioning follows Semantic Versioning (https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-04-20
+
+### Added
+- `.deb` and `.rpm` installer packages produced automatically on every `v*` tag
+  push via GoReleaser nfpms. Both `linux/amd64` and `linux/arm64` are built.
+- Systemd service unit installs to `/usr/lib/systemd/system/ollama-exporter.service`;
+  the post-install script creates a dedicated `ollama-exporter` system user/group
+  and enables the service automatically.
+- `/etc/ollama-exporter/ollama-exporter.yml` as the canonical installed config path,
+  marked `type: config` in the package so upgrades never overwrite user edits.
+
+### Fixed
+- Config YAML file parsing was never executed (TODO stub). All config fields —
+  including nested `proxy` and `gpu` sections and the `exclude_paths` list — are
+  now parsed from the YAML file using a stdlib-only parser.
+- `--config` default changed from relative `config.yaml` to absolute
+  `/etc/ollama-exporter/ollama-exporter.yml`, matching the installed path.
+- `log_level` config field is now applied to the slog handler at startup.
+
+### Changed
+- Config file renamed from `config.yaml` to `ollama-exporter.yml`.
+
 ## [0.2.0] - 2026-04-09
 
 ### Added

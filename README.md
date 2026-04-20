@@ -133,7 +133,7 @@ Includes: ollama-exporter, Prometheus, Grafana with pre-built dashboard.
 ## Configuration
 
 ```yaml
-# config.yaml
+# ollama-exporter.yml
 ollama_url: "http://localhost:11434"
 listen_addr: ":9400"
 poll_interval: "15s"
@@ -197,7 +197,7 @@ no special capabilities or sudo are needed to run the exporter.
 
 ### Disabling GPU Collection
 
-Set `gpu.enabled: false` in `config.yaml` to disable GPU metric collection
+Set `gpu.enabled: false` in `ollama-exporter.yml` to disable GPU metric collection
 entirely. The exporter also disables GPU metrics automatically (with a warning)
 when no AMD GPUs are found at startup.
 

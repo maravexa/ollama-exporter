@@ -2,8 +2,12 @@
 package config
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -60,11 +64,21 @@ type ProxyConfig struct {
 
 // Load reads configuration from the given YAML file path,
 // applying environment variable overrides where present.
-// TODO: implement YAML parsing via encoding/json or a minimal YAML parser.
+// A missing file is not fatal; defaults are used and a warning is logged to stderr.
 func Load(path string) (*Config, error) {
 	cfg := defaults()
 
-	// Environment variable overrides.
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("reading config %s: %w", path, err)
+	}
+	if err == nil {
+		if parseErr := parseYAML(data, cfg); parseErr != nil {
+			return nil, fmt.Errorf("parsing config %s: %w", path, parseErr)
+		}
+	}
+
+	// Environment variable overrides applied after file values.
 	if v := os.Getenv("OLLAMA_URL"); v != "" {
 		cfg.OllamaURL = v
 	}
@@ -111,4 +125,164 @@ func (c *Config) validate() error {
 		return fmt.Errorf("poll_interval must be >= 1s")
 	}
 	return nil
+}
+
+// parseYAML parses a minimal YAML subset into cfg. Only fields explicitly present
+// in the file override the existing cfg values; absent fields retain their defaults.
+//
+// Supported format:
+//   - Top-level scalar key: value pairs
+//   - Two nested sections: proxy: and gpu: (2-space indent)
+//   - Block list under proxy.exclude_paths (4-space indent, "- item")
+//   - Inline comments after " #"
+//   - Quoted and unquoted string values
+//
+// Inline lists (exclude_paths: ["/", ...]) are not supported.
+func parseYAML(data []byte, cfg *Config) error {
+	type section int
+	const (
+		sectionTop   section = iota
+		sectionProxy section = iota
+		sectionGPU   section = iota
+	)
+
+	current := sectionTop
+	inExcludePaths := false
+
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	for scanner.Scan() {
+		raw := scanner.Text()
+
+		// Strip inline comment (YAML: space then hash signals a comment).
+		if ci := strings.Index(raw, " #"); ci >= 0 {
+			raw = raw[:ci]
+		}
+
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || trimmed == "---" {
+			continue
+		}
+
+		indent := len(raw) - len(strings.TrimLeft(raw, " \t"))
+
+		// Block list item (indent >= 4, starts with "- ").
+		if inExcludePaths && indent >= 4 && strings.HasPrefix(trimmed, "- ") {
+			cfg.Proxy.ExcludePaths = append(cfg.Proxy.ExcludePaths, unquote(trimmed[2:]))
+			continue
+		}
+
+		// Any non-list line exits the exclude_paths list context.
+		inExcludePaths = false
+
+		// Section header: zero indent, no spaces in key, ends with ":".
+		if indent == 0 && strings.HasSuffix(trimmed, ":") && !strings.Contains(trimmed[:len(trimmed)-1], " ") {
+			switch trimmed {
+			case "proxy:":
+				current = sectionProxy
+			case "gpu:":
+				current = sectionGPU
+			default:
+				current = sectionTop
+			}
+			continue
+		}
+
+		// Key: value pair.
+		ci := strings.Index(trimmed, ":")
+		if ci < 0 {
+			continue
+		}
+		key := trimmed[:ci]
+		val := unquote(strings.TrimSpace(trimmed[ci+1:]))
+
+		switch current {
+		case sectionTop:
+			if err := applyTopField(cfg, key, val); err != nil {
+				return err
+			}
+		case sectionProxy:
+			if key == "exclude_paths" {
+				cfg.Proxy.ExcludePaths = nil // reset; block list items follow
+				inExcludePaths = true
+				continue
+			}
+			if err := applyProxyField(&cfg.Proxy, key, val); err != nil {
+				return err
+			}
+		case sectionGPU:
+			if err := applyGPUField(&cfg.GPU, key, val); err != nil {
+				return err
+			}
+		}
+	}
+	return scanner.Err()
+}
+
+func applyTopField(cfg *Config, key, val string) error {
+	if val == "" {
+		return nil
+	}
+	switch key {
+	case "ollama_url":
+		cfg.OllamaURL = val
+	case "listen_addr":
+		cfg.ListenAddr = val
+	case "poll_interval":
+		d, err := time.ParseDuration(val)
+		if err != nil {
+			return fmt.Errorf("poll_interval: %w", err)
+		}
+		cfg.PollInterval = d
+	case "log_level":
+		cfg.LogLevel = val
+	}
+	return nil
+}
+
+func applyProxyField(p *ProxyConfig, key, val string) error {
+	switch key {
+	case "enabled":
+		b, err := strconv.ParseBool(val)
+		if err != nil {
+			return fmt.Errorf("proxy.enabled: %w", err)
+		}
+		p.Enabled = b
+	case "listen_addr":
+		if val != "" {
+			p.ListenAddr = val
+		}
+	}
+	return nil
+}
+
+func applyGPUField(g *GPUConfig, key, val string) error {
+	switch key {
+	case "enabled":
+		b, err := strconv.ParseBool(val)
+		if err != nil {
+			return fmt.Errorf("gpu.enabled: %w", err)
+		}
+		g.Enabled = b
+	case "poll_interval":
+		if val != "" {
+			d, err := time.ParseDuration(val)
+			if err != nil {
+				return fmt.Errorf("gpu.poll_interval: %w", err)
+			}
+			g.PollInterval = d
+		}
+	case "sysfs_base":
+		if val != "" {
+			g.SysfsBase = val
+		}
+	}
+	return nil
+}
+
+// unquote removes surrounding double quotes from s if present.
+func unquote(s string) string {
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		return s[1 : len(s)-1]
+	}
+	return s
 }

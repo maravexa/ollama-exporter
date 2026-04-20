@@ -15,4 +15,11 @@ proxy:
     - "/api/show"
     - "/api/version"
 
+gpu:
+  enabled: true
+  # Separate poll interval for GPU sysfs reads; inherits poll_interval if omitted.
+  # poll_interval: "5s"
+  # Override the sysfs DRM root; useful for testing.
+  # sysfs_base: "/sys/class/drm"
+
 log_level: "info"

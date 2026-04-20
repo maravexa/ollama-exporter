@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -24,7 +25,7 @@ var Version = "dev"
 
 func main() {
 	slog.Info("starting ollama-exporter", "version", Version)
-	configPath := flag.String("config", "config.yaml", "path to config file")
+	configPath := flag.String("config", "/etc/ollama-exporter/ollama-exporter.yml", "path to config file")
 	flag.Parse()
 
 	cfg, err := config.Load(*configPath)
@@ -34,6 +35,14 @@ func main() {
 	}
 
 	level := slog.LevelInfo
+	switch strings.ToLower(cfg.LogLevel) {
+	case "debug":
+		level = slog.LevelDebug
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
 
 	reg := prometheus.NewRegistry()
