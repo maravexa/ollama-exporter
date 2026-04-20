@@ -63,7 +63,8 @@ ollama-exporter/
 ├── LICENSE
 ├── Dockerfile
 ├── docker-compose.yml
-├── config.yaml.example
+├── ollama-exporter.yml
+├── ollama-exporter.yml.example
 ├── go.mod
 ├── go.sum
 ├── cmd/
