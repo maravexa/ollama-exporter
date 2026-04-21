@@ -23,7 +23,7 @@ builds:
 nfpms:
   - id: ollama-exporter
     package_name: ollama-exporter
-    builds:
+    ids:
       - ollama-exporter
     formats:
       - deb
@@ -46,9 +46,10 @@ nfpms:
 
 archives:
   - id: ollama-exporter
-    builds:
+    ids:
       - ollama-exporter
-    format: tar.gz
+    formats:
+      - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
@@ -58,10 +59,9 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
-release:
-  extra_files:
-    - glob: ./dist/*.deb
-    - glob: ./dist/*.rpm
+# nfpm artifacts (.deb, .rpm) are registered automatically; no extra_files needed.
+# Listing them here caused "artifact already present" 422 errors on GitHub release upload.
+release: {}
 
 changelog:
   sort: asc
@@ -71,6 +71,8 @@ changelog:
       - "^test:"
       - "^chore:"
 
+# TODO: migrate dockers/docker_manifests to dockers_v2 syntax when targeting
+# GoReleaser ≥ v2.x fully-deprecated release (not causing current failures).
 dockers:
   - id: amd64
     image_templates:
