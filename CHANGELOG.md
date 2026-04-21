@@ -6,7 +6,11 @@ Versioning follows Semantic Versioning (https://semver.org/).
 
 ## [Unreleased]
 
-## [0.3.1] - 2026-04-20
+## [0.1.2] - 2026-04-21
+
+Consolidates all unreleased changes from the 0.2.0 and 0.3.x development cycle;
+those tags were never successfully published (GoReleaser config errors) and the
+version number is being rewound to match the project's actual maturity level.
 
 ### Added
 - `.deb` and `.rpm` installer packages produced automatically on every `v*` tag
@@ -16,21 +20,6 @@ Versioning follows Semantic Versioning (https://semver.org/).
   and enables the service automatically.
 - `/etc/ollama-exporter/ollama-exporter.yml` as the canonical installed config path,
   marked `type: config` in the package so upgrades never overwrite user edits.
-
-### Fixed
-- Config YAML file parsing was never executed (TODO stub). All config fields —
-  including nested `proxy` and `gpu` sections and the `exclude_paths` list — are
-  now parsed from the YAML file using a stdlib-only parser.
-- `--config` default changed from relative `config.yaml` to absolute
-  `/etc/ollama-exporter/ollama-exporter.yml`, matching the installed path.
-- `log_level` config field is now applied to the slog handler at startup.
-
-### Changed
-- Config file renamed from `config.yaml` to `ollama-exporter.yml`.
-
-## [0.2.0] - 2026-04-09
-
-### Added
 - AMD GPU metrics via sysfs: utilization, temperature, VRAM usage, power draw,
   and clock speeds (`ollama_gpu_utilization_percent`, `ollama_gpu_temperature_celsius`,
   `ollama_gpu_vram_used_bytes`, `ollama_gpu_vram_total_bytes`, `ollama_gpu_power_watts`,
@@ -46,11 +35,23 @@ Versioning follows Semantic Versioning (https://semver.org/).
   models present at first scrape are treated as already loaded and do not fire counters.
 
 ### Fixed
+- Config YAML file parsing was never executed (TODO stub). All config fields —
+  including nested `proxy` and `gpu` sections and the `exclude_paths` list — are
+  now parsed from the YAML file using a stdlib-only parser.
+- `--config` default changed from relative `config.yaml` to absolute
+  `/etc/ollama-exporter/ollama-exporter.yml`, matching the installed path.
+- `log_level` config field is now applied to the slog handler at startup.
 - Filtered internal proxy calls (`/api/ps`, `/api/tags`, `/api/show`, `/api/version`, `/`)
   from `ollama_request_duration_seconds` and related per-request metrics to reduce label
   cardinality noise; these paths still proxy through to Ollama normally.
 - VRAM gauge (`ollama_model_vram_bytes`) now resets to 0 on model unload instead of
   retaining the last observed value.
+- GoReleaser config: migrated deprecated v1 fields (`archives.builds`→`ids`,
+  `archives.format`→`formats`, `nfpms.builds`→`ids`) and removed `release.extra_files`
+  glob for nfpm artifacts (caused duplicate-artifact 422 errors on GitHub release upload).
+
+### Changed
+- Config file renamed from `config.yaml` to `ollama-exporter.yml`.
 
 ## [0.1.1] - 2026-03-30
 
