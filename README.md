@@ -88,6 +88,14 @@ go install github.com/maravexa/ollama-exporter/cmd/exporter@latest
 ollama-exporter --ollama-url http://localhost:11434 --listen :9400
 ```
 
+```bash
+# Debian/Ubuntu
+sudo apt install ./<deb-file>
+
+# RPM
+sudo yum install ./<rpm-file>
+```
+
 ### Docker
 
 Linux (host.docker.internal requires --add-host flag):
