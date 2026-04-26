@@ -1,5 +1,7 @@
 # ollama-exporter
 
+[![CI](https://github.com/maravexa/ollama-exporter/actions/workflows/ci.yaml/badge.svg)](https://github.com/maravexa/ollama-exporter/actions/workflows/ci.yaml)
+
 A production-grade Go Prometheus exporter for [Ollama](https://ollama.com) LLM inference.
 
 Exposes per-request inference metrics, model lifecycle events, and derived AI-specific
@@ -250,8 +252,6 @@ flowchart TD
 Inference metrics correlate with behavioral probe results in a single Grafana instance.
 
 ## Development
-
-[![CI](https://github.com/maravexa/ollama-exporter/actions/workflows/ci.yaml/badge.svg)](https://github.com/maravexa/ollama-exporter/actions/workflows/ci.yaml)
 
 CI runs automatically on all PRs and pushes to main (lint, test with race detector,
 govulncheck reachability analysis, and cross-platform build verification).
