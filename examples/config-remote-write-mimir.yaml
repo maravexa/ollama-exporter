@@ -1,0 +1,55 @@
+# ollama-exporter — push to a self-hosted Grafana Mimir cluster.
+#
+# Drop this at /etc/ollama-exporter/ollama-exporter.yml and adjust the URL,
+# tenant ID, and credential paths to match your environment.
+
+ollama_url: "http://localhost:11434"
+poll_interval: "15s"
+
+# Local /metrics is still served on :9400 for ad-hoc curls and as the
+# self-observability surface for the remote write pipeline. Set
+# enabled: false for push-only deployments.
+metrics_endpoint:
+  enabled: true
+  listen_address: ":9400"
+
+remote_write:
+  - url: https://mimir.internal.example.com/api/v1/push
+    name: mimir-primary
+    flush_interval: 10s
+    timeout: 30s
+
+    # Mimir tenant header.
+    headers:
+      X-Scope-OrgID: ollama-cluster
+
+    # Stage credentials via systemd LoadCredential= or a tmpfs mount.
+    basic_auth:
+      username: ollama-cluster
+      password_file: /run/credentials/ollama-exporter/mimir_password
+
+    # In-memory queue. 10000 batches at a 10s flush interval covers a
+    # ~28-hour outage at the default scrape rate. Increase if your
+    # downstream is known to have longer maintenance windows.
+    queue:
+      capacity: 10000
+
+    retry:
+      max_attempts: 10
+      max_elapsed: 5m
+      initial_backoff: 1s
+      max_backoff: 30s
+
+    circuit_breaker:
+      failure_threshold: 5
+      window: 1m
+      cooldown: 30s
+
+    tls:
+      ca_file: /etc/ssl/internal-ca.pem
+
+    # Cluster-wide labels stamped onto every series.
+    external_labels:
+      cluster: cyberdeck
+      env: homelab
+      exporter: ollama-exporter

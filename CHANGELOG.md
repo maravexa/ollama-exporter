@@ -6,6 +6,55 @@ Versioning follows Semantic Versioning (https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-29
+
+### Added
+- Native **Prometheus Remote Write 1.0** push mode. The exporter can now
+  push samples directly to Mimir, Grafana Cloud, Thanos Receive,
+  VictoriaMetrics, or any PRW 1.0–compatible receiver in addition to (or
+  instead of) the existing pull `/metrics` endpoint. See
+  [docs/remote-write.md](docs/remote-write.md).
+- `metrics_endpoint` config block with `enabled` and `listen_address`
+  fields. Setting `enabled: false` disables the local HTTP listener for
+  push-only deployments.
+- `remote_write[]` config array. v0.4.0 wires the first entry; multi-endpoint
+  fan-out is planned for v0.5.
+- Self-observability metrics for the push pipeline (all under
+  `ollama_exporter_remote_write_*`): samples sent / failed / dropped,
+  send duration histogram, queue length & capacity, last-send timestamp,
+  retry counter, circuit breaker state.
+- Configurable bounded in-memory queue with drop-oldest overflow,
+  exponential backoff with full jitter, retry budget (count + wall clock),
+  and a per-endpoint circuit breaker that opens on sustained
+  non-retryable failures only.
+- Mock receiver test harness at `internal/remotewrite/testutil` and
+  end-to-end tests at `test/e2e/`.
+- Reference configs: `examples/config-remote-write-mimir.yaml`,
+  `examples/config-remote-write-grafana-cloud.yaml`, and
+  `examples/alloy/config.alloy` for the recommended collector-based path.
+- Guidance doc: [docs/alloy-vs-native-push.md](docs/alloy-vs-native-push.md)
+  on when to use native push vs. a Prometheus-compatible scraper +
+  remote_write collector (Alloy, Prometheus Agent, OTel).
+
+### Security
+- Plaintext `password:` and `bearer_token:` keys are **rejected at config
+  load** with an error naming the offending field. Only `password_file`
+  and `bearer_token_file` are accepted. Stage credentials via systemd
+  `LoadCredential=`, Kubernetes secrets, or `/run/credentials/`.
+- `tls.insecure_skip_verify: true` and `insecure_http: true` log a WARN
+  at startup naming the affected endpoint.
+- Reserved protocol headers (`Authorization`, `Content-Encoding`,
+  `Content-Type`, `X-Prometheus-Remote-Write-Version`) cannot be
+  overridden via the user `headers:` map.
+- URL userinfo embedded in transport-level errors is redacted before
+  any error reaches a log handler.
+
+### Limitations (called out in docs)
+- Tier 2 durability only — bounded in-memory queue, no disk WAL. Samples
+  buffered during a remote outage are lost on process restart.
+- Single endpoint per exporter instance (multi-endpoint planned for v0.5).
+- PRW 1.0 only — PRW 2.0 (native histograms, metadata) planned.
+
 ## [0.1.2] - 2026-04-21
 
 Consolidates all unreleased changes from the 0.2.0 and 0.3.x development cycle;
