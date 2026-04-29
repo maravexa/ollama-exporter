@@ -1,0 +1,52 @@
+// Reference Grafana Alloy config that scrapes ollama-exporter and
+// remote_writes the result to a downstream Prometheus-compatible store.
+//
+// This is the recommended deployment topology if you are already
+// running a collector. See docs/alloy-vs-native-push.md for the full
+// rationale.
+
+prometheus.scrape "ollama_exporter" {
+  targets = [
+    {
+      __address__ = "localhost:9400",
+      job         = "ollama-exporter",
+      instance    = "cyberdeck.vexa.heim",
+    },
+  ]
+  forward_to     = [prometheus.remote_write.mimir.receiver]
+  scrape_interval = "15s"
+}
+
+prometheus.remote_write "mimir" {
+  endpoint {
+    url = "https://mimir.internal.example.com/api/v1/push"
+
+    headers = {
+      "X-Scope-OrgID" = "ollama-cluster",
+    }
+
+    basic_auth {
+      username      = "ollama-cluster"
+      password_file = "/run/credentials/alloy/mimir_password"
+    }
+
+    tls_config {
+      ca_file = "/etc/ssl/internal-ca.pem"
+    }
+  }
+
+  external_labels = {
+    cluster  = "cyberdeck",
+    env      = "homelab",
+    exporter = "ollama-exporter",
+  }
+
+  // Disk-backed WAL — survives Alloy restarts and arbitrarily long
+  // remote outages. This is the main reason to prefer Alloy over the
+  // exporter's native push mode.
+  wal {
+    truncate_frequency = "2h"
+    min_keepalive_time = "5m"
+    max_keepalive_time = "8h"
+  }
+}

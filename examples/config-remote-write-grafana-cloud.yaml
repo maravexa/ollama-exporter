@@ -1,0 +1,45 @@
+# ollama-exporter — push to Grafana Cloud Metrics.
+#
+# Grafana Cloud uses a Prometheus instance ID as the basic_auth username
+# and a Grafana.com API key (with the MetricsPublisher role) as the
+# password. Find both under Connections → Data sources → Prometheus in
+# your Grafana Cloud stack.
+#
+# Drop this at /etc/ollama-exporter/ollama-exporter.yml and substitute
+# the URL host, instance ID, and credential path for your stack.
+
+ollama_url: "http://localhost:11434"
+poll_interval: "15s"
+
+metrics_endpoint:
+  enabled: true
+  listen_address: ":9400"
+
+remote_write:
+  - url: https://prometheus-prod-XX-prod-eu-west-N.grafana.net/api/prom/push
+    name: grafana-cloud
+    flush_interval: 15s
+    timeout: 30s
+
+    basic_auth:
+      username: "1234567"   # your Prometheus instance ID
+      password_file: /run/credentials/ollama-exporter/grafana_cloud_api_key
+
+    queue:
+      capacity: 10000
+
+    retry:
+      max_attempts: 10
+      max_elapsed: 5m
+      initial_backoff: 1s
+      max_backoff: 30s
+
+    circuit_breaker:
+      failure_threshold: 5
+      window: 1m
+      cooldown: 30s
+
+    external_labels:
+      cluster: cyberdeck
+      env: homelab
+      exporter: ollama-exporter

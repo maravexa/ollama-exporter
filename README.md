@@ -34,6 +34,19 @@ then forwards the original response downstream. Latency overhead: microseconds.
 If proxy health check fails, the exporter degrades gracefully to poller-only mode.
 Prometheus continues receiving model state metrics without interruption.
 
+### Output: Pull and/or Push
+
+By default the exporter exposes `/metrics` for Prometheus to scrape. Optionally
+it can also (or instead) **push** samples to any Prometheus Remote Write 1.0
+endpoint — Mimir, Grafana Cloud, Thanos Receive, VictoriaMetrics, or anything
+else that speaks the protocol. Push and pull work together; either can be
+disabled.
+
+See [docs/remote-write.md](docs/remote-write.md) for the full reference,
+[docs/alloy-vs-native-push.md](docs/alloy-vs-native-push.md) for guidance on
+when to use which approach, and [examples/](examples/) for ready-to-edit
+configs against Mimir and Grafana Cloud.
+
 ### Metric Design
 
 - Namespace: `ollama_`
@@ -167,6 +180,23 @@ gpu:
   # sysfs_base: /sys/class/drm   # override for testing
 
 log_level: "info"  # debug | info | warn | error
+```
+
+Optional remote write block (full schema in [docs/remote-write.md](docs/remote-write.md)):
+
+```yaml
+metrics_endpoint:
+  enabled: true            # set to false for push-only
+  listen_address: ":9400"
+
+remote_write:
+  - url: https://mimir.example.com/api/v1/push
+    name: primary
+    flush_interval: 10s
+    bearer_token_file: /run/credentials/exporter/mimir_token
+    external_labels:
+      cluster: xena
+      env: homelab
 ```
 
 All fields overridable via environment variables: `OLLAMA_URL`, `LISTEN_ADDR`, etc.
