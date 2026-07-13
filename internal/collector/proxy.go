@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/maravexa/ollama-exporter/internal/config"
@@ -87,15 +88,15 @@ func (p *Proxy) instrumentedHandler(next http.Handler) http.Handler {
 		endpoint := r.URL.Path
 
 		if r.Method == http.MethodPost &&
-			(endpoint == "/api/generate" || endpoint == "/api/chat") &&
+			(endpoint == "/api/generate" || endpoint == "/api/chat" || strings.HasPrefix(endpoint, "/v1/")) &&
 			r.Body != nil {
 			bodyBytes, err := io.ReadAll(r.Body)
 			if err != nil {
 				slog.Debug("proxy: failed to read request body", "err", err)
-			}
-			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-			r.ContentLength = int64(len(bodyBytes))
-			if len(bodyBytes) > 0 {
+			} else if len(bodyBytes) > 0 {
+				r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+				r.ContentLength = int64(len(bodyBytes))
+
 				var req struct {
 					Model string `json:"model"`
 				}
@@ -118,10 +119,21 @@ func (p *Proxy) instrumentedHandler(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 
 		info := p.mc.Get(context.Background(), model)
-		p.metrics.RequestDuration.
+		p.metrics.ProxyRequestDurationSeconds.
 			WithLabelValues(model, info.Family, info.Quant, endpoint).
 			Observe(time.Since(start).Seconds())
 	})
+}
+
+// inferenceRequest holds the parsed timing fields extracted from an upstream response.
+type inferenceRequest struct {
+	DurationSeconds  float64
+	LoadDuration     float64
+	PromptDuration   float64
+	EvalDuration     float64
+	PromptEvalNs     int64 // nanoseconds for KV cache pressure derivation
+	PromptTokens     int64
+	CompletionTokens int64
 }
 
 // modifyResponse intercepts the upstream response, reads Ollama's timing
@@ -132,7 +144,7 @@ func (p *Proxy) modifyResponse(resp *http.Response) error {
 		return nil
 	}
 	path := resp.Request.URL.Path
-	if path != "/api/generate" && path != "/api/chat" {
+	if (path != "/api/generate" && path != "/api/chat" && !strings.HasPrefix(path, "/v1/")) || resp.Body == nil {
 		return nil
 	}
 
@@ -149,47 +161,121 @@ func (p *Proxy) modifyResponse(resp *http.Response) error {
 	resp.ContentLength = int64(len(body))
 	resp.TransferEncoding = nil // clear chunked encoding if set
 
-	var gen ollama.GenerateResponse
-	if err := json.Unmarshal(body, &gen); err != nil {
-		return nil //nolint:nilerr // intentional: non-generate/streaming responses must not fail the proxy
-	}
-	if !gen.Done {
-		return nil
-	}
+	var parsed inferenceRequest
+	var model string
+	var info ModelInfo
 
-	info := p.mc.Get(context.Background(), gen.Model)
-	labels := make([]string, 0, 4)
-	labels = append(labels, gen.Model, info.Family, info.Quant)
-
-	const nsToSec = 1e9
-
-	if gen.LoadDuration > 0 {
-		p.metrics.LoadDuration.WithLabelValues(labels...).
-			Observe(float64(gen.LoadDuration) / nsToSec)
-		p.metrics.ModelLoadDurationSeconds.WithLabelValues(gen.Model).
-			Observe(float64(gen.LoadDuration) / nsToSec)
-	}
-	if gen.PromptEvalDuration > 0 {
-		p.metrics.PromptEvalDuration.WithLabelValues(labels...).
-			Observe(float64(gen.PromptEvalDuration) / nsToSec)
-		if gen.PromptEvalCount > 0 {
-			tps := float64(gen.PromptEvalCount) / (float64(gen.PromptEvalDuration) / nsToSec)
-			p.metrics.PromptTokensPerSec.WithLabelValues(labels...).Set(tps)
-
-			pressure := float64(gen.PromptEvalDuration) / float64(gen.PromptEvalCount)
-			p.metrics.KVCachePressureRatio.WithLabelValues(labels...).Set(pressure)
-		}
-	}
-	if gen.EvalDuration > 0 {
-		p.metrics.EvalDuration.WithLabelValues(labels...).
-			Observe(float64(gen.EvalDuration) / nsToSec)
-		if gen.EvalCount > 0 {
-			tps := float64(gen.EvalCount) / (float64(gen.EvalDuration) / nsToSec)
-			p.metrics.TokensPerSecond.WithLabelValues(labels...).Set(tps)
-		}
+	switch {
+	case path == "/api/generate" || path == "/api/chat":
+		model, info, parsed, err = p.parseNative(body)
+	case strings.HasPrefix(path, "/v1/"):
+		model, info, parsed, err = p.parseOpenAI(body)
+	default:
+		return nil // no instrumentation for this endpoint
 	}
 
-	p.metrics.RequestsTotal.WithLabelValues(append(labels, path)...).Inc()
+	if err != nil {
+		return err
+	} else if model == "" || (parsed.DurationSeconds == 0 && parsed.CompletionTokens == 0) {
+		return nil // skip metrics when no meaningful data to record
+	}
+
+	modelLabels := make([]string, 0, 4)
+	modelLabels = append(modelLabels, model, info.Family, info.Quant)
+	endpointLabels := append(modelLabels, path)
+
+	p.metrics.UpstreamRequestDurationSeconds.WithLabelValues(endpointLabels...).Observe(parsed.DurationSeconds)
+	if parsed.LoadDuration > 0 {
+		p.metrics.LoadDuration.WithLabelValues(modelLabels...).Observe(parsed.LoadDuration)
+		p.metrics.ModelLoadDurationSeconds.WithLabelValues(model).Observe(parsed.LoadDuration)
+	}
+	if parsed.PromptDuration > 0 {
+		p.metrics.PromptEvalDuration.WithLabelValues(modelLabels...).Observe(parsed.PromptDuration)
+	}
+	if parsed.EvalDuration > 0 {
+		p.metrics.EvalDuration.WithLabelValues(modelLabels...).Observe(parsed.EvalDuration)
+	}
+	if parsed.PromptTokens > 0 && parsed.PromptDuration > 0 {
+		p.metrics.PromptTokensPerSec.
+			WithLabelValues(modelLabels...).Set(float64(parsed.PromptTokens) / parsed.PromptDuration)
+	}
+	if parsed.CompletionTokens > 0 && parsed.EvalDuration > 0 {
+		p.metrics.TokensPerSecond.
+			WithLabelValues(modelLabels...).Set(float64(parsed.CompletionTokens) / parsed.EvalDuration)
+	}
+	// KV cache pressure uses nanoseconds per token (native API only; zero for v1).
+	if parsed.PromptEvalNs > 0 && parsed.PromptTokens > 0 {
+		p.metrics.KVCachePressureRatio.WithLabelValues(modelLabels...).Set(
+			float64(parsed.PromptEvalNs) / float64(parsed.PromptTokens),
+		)
+	}
+
+	p.metrics.RequestsTotal.WithLabelValues(endpointLabels...).Inc()
 
 	return nil
+}
+
+// parseNative parses timing fields from a native /api/generate or /api/chat response.
+func (p *Proxy) parseNative(body []byte) (model string, info ModelInfo, parsed inferenceRequest, err error) {
+	var gen ollama.GenerateResponse
+	if err = json.Unmarshal(body, &gen); err != nil {
+		return //nolint:nilerr // non-generate/streaming responses must not fail the proxy
+	}
+	if !gen.Done {
+		return "", ModelInfo{}, inferenceRequest{}, nil
+	}
+
+	model = gen.Model
+	info = p.mc.Get(context.Background(), model)
+
+	const nsToSec = 1e9
+	parsed.DurationSeconds = float64(gen.TotalDuration) / nsToSec
+	if gen.LoadDuration > 0 {
+		parsed.LoadDuration = float64(gen.LoadDuration) / nsToSec
+	}
+	if gen.PromptEvalDuration > 0 {
+		parsed.PromptDuration = float64(gen.PromptEvalDuration) / nsToSec
+		parsed.PromptEvalNs = gen.PromptEvalDuration
+		parsed.PromptTokens = gen.PromptEvalCount
+	}
+	if gen.EvalDuration > 0 {
+		parsed.EvalDuration = float64(gen.EvalDuration) / nsToSec
+		parsed.CompletionTokens = gen.EvalCount
+	}
+
+	return model, info, parsed, nil
+}
+
+// parseOpenAI parses timing fields from an OpenAI-compatible /v1/* response.
+func (p *Proxy) parseOpenAI(body []byte) (model string, info ModelInfo, parsed inferenceRequest, err error) {
+	var openaiResp ollama.OpenAIChatCompletionResponse
+	if err = json.Unmarshal(body, &openaiResp); err != nil {
+		return
+	}
+
+	usage := openaiResp.Usage
+	msToSec := 1e3 // convert milliseconds to seconds
+
+	parsed.PromptDuration = float64(usage.PromptTime) / msToSec
+	parsed.EvalDuration = float64(usage.CompletionTime) / msToSec
+	parsed.DurationSeconds = float64(usage.TotalTime) / msToSec
+	parsed.PromptTokens = usage.PromptTokens
+	parsed.CompletionTokens = usage.CompletionTokens
+
+	// Model name must come from the request body — not all v1 responses include it.
+	var reqModel string
+	if len(body) > 0 {
+		var req struct {
+			Model string `json:"model"`
+		}
+		if json.Unmarshal(body, &req) == nil && req.Model != "" {
+			reqModel = req.Model
+		}
+	}
+	if reqModel == "" {
+		reqModel = "_" // Prometheus convention for missing label values
+	}
+
+	info = p.mc.Get(context.Background(), reqModel)
+	return reqModel, info, parsed, nil
 }

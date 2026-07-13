@@ -19,15 +19,16 @@ type Metrics struct {
 	ModelLoadDurationSeconds *prometheus.HistogramVec
 
 	// Per-request inference (proxy mode)
-	RequestDuration      *prometheus.HistogramVec
-	LoadDuration         *prometheus.HistogramVec
-	PromptEvalDuration   *prometheus.HistogramVec
-	EvalDuration         *prometheus.HistogramVec
-	TokensPerSecond      *prometheus.GaugeVec
-	PromptTokensPerSec   *prometheus.GaugeVec
-	RequestsInFlight     *prometheus.GaugeVec
-	RequestsTotal        *prometheus.CounterVec
-	KVCachePressureRatio *prometheus.GaugeVec
+	ProxyRequestDurationSeconds    *prometheus.HistogramVec
+	UpstreamRequestDurationSeconds *prometheus.HistogramVec
+	LoadDuration                   *prometheus.HistogramVec
+	PromptEvalDuration             *prometheus.HistogramVec
+	EvalDuration                   *prometheus.HistogramVec
+	TokensPerSecond                *prometheus.GaugeVec
+	PromptTokensPerSec             *prometheus.GaugeVec
+	RequestsInFlight               *prometheus.GaugeVec
+	RequestsTotal                  *prometheus.CounterVec
+	KVCachePressureRatio           *prometheus.GaugeVec
 }
 
 // New constructs and registers all metrics with the given registry.
@@ -82,10 +83,17 @@ func New(reg prometheus.Registerer) *Metrics {
 			Buckets:   []float64{0.5, 1, 2, 5, 10, 20, 30, 60, 120},
 		}, []string{"model"}),
 
-		RequestDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		ProxyRequestDurationSeconds: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Namespace: "ollama",
-			Name:      "request_duration_seconds",
-			Help:      "End-to-end latency of requests proxied through the exporter.",
+			Name:      "proxy_request_duration_seconds",
+			Help:      "Wall-clock latency measured at the proxy, including network round-trip and processing overhead.",
+			Buckets:   prometheus.ExponentialBuckets(0.1, 2, 12),
+		}, []string{"model", "family", "quant", "endpoint"}),
+
+		UpstreamRequestDurationSeconds: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: "ollama",
+			Name:      "upstream_request_duration_seconds",
+			Help:      "Upstream-reported request duration, sourced from response body timing fields (e.g. usage.total_time). Excludes network and proxy overhead.",
 			Buckets:   prometheus.ExponentialBuckets(0.1, 2, 12),
 		}, []string{"model", "family", "quant", "endpoint"}),
 
@@ -150,7 +158,8 @@ func New(reg prometheus.Registerer) *Metrics {
 		m.ModelLoadEventsTotal,
 		m.ModelUnloadEventsTotal,
 		m.ModelLoadDurationSeconds,
-		m.RequestDuration,
+		m.ProxyRequestDurationSeconds,
+		m.UpstreamRequestDurationSeconds,
 		m.LoadDuration,
 		m.PromptEvalDuration,
 		m.EvalDuration,

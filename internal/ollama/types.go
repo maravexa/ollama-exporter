@@ -58,3 +58,20 @@ type GenerateResponse struct {
 	EvalCount          int64  `json:"eval_count"`
 	EvalDuration       int64  `json:"eval_duration"`
 }
+
+// OpenAIUsage mirrors the usage object returned by Ollama's /v1/* endpoints.
+// Timing fields are in milliseconds (not nanoseconds).
+type OpenAIUsage struct {
+	PromptTokens     int64 `json:"prompt_tokens"`
+	CompletionTokens int64 `json:"completion_tokens"`
+	TotalTokens      int64 `json:"total_tokens"`
+	// TotalTime, PromptTime, CompletionTime are in milliseconds.
+	TotalTime      int64 `json:"total_time,omitempty"`
+	PromptTime     int64 `json:"prompt_time,omitempty"`
+	CompletionTime int64 `json:"completion_time,omitempty"`
+}
+
+// OpenAIChatCompletionResponse mirrors the structure returned by Ollama's /v1/chat/completions endpoint.
+type OpenAIChatCompletionResponse struct {
+	Usage OpenAIUsage `json:"usage"`
+}
