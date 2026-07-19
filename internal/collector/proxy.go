@@ -50,6 +50,10 @@ func (p *Proxy) Start(ctx context.Context) error {
 
 	rp := httputil.NewSingleHostReverseProxy(target)
 	rp.ModifyResponse = p.modifyResponse
+	// Ollama streams NDJSON chunk-per-token. Flush every write straight
+	// through so the proxy does not add buffering latency to interactive
+	// streaming clients.
+	rp.FlushInterval = -1
 
 	mux := http.NewServeMux()
 	mux.Handle("/", p.instrumentedHandler(rp))
@@ -124,39 +128,38 @@ func (p *Proxy) instrumentedHandler(next http.Handler) http.Handler {
 	})
 }
 
-// modifyResponse intercepts the upstream response, reads Ollama's timing
-// fields from the JSON body, records histogram observations, then restores
-// the body so the downstream client receives an unmodified response.
+// modifyResponse intercepts the upstream response and installs a streaming
+// NDJSON scanner over the body. Ollama replies to /api/generate and /api/chat
+// with newline-delimited JSON when "stream" is true (the default for
+// `ollama run`, Open WebUI and most clients) and with a single JSON object
+// when it is false. In both cases the inference timing fields only appear in
+// the object carrying "done": true.
+//
+// The scanner parses each line as it passes through to the client, so the
+// response is never buffered and interactive streaming latency is preserved.
+// Timings are recorded once the stream completes.
 func (p *Proxy) modifyResponse(resp *http.Response) error {
-	if resp.Request.Method != http.MethodPost {
+	if resp.Request == nil || resp.Request.Method != http.MethodPost {
 		return nil
 	}
 	path := resp.Request.URL.Path
 	if path != "/api/generate" && path != "/api/chat" {
 		return nil
 	}
-
-	body, err := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return err
-	}
-
-	// Always restore body and fix framing headers so the downstream client
-	// receives correct Content-Length regardless of whether the upstream used
-	// chunked transfer encoding or a fixed content-length.
-	resp.Body = io.NopCloser(bytes.NewReader(body))
-	resp.ContentLength = int64(len(body))
-	resp.TransferEncoding = nil // clear chunked encoding if set
-
-	var gen ollama.GenerateResponse
-	if err := json.Unmarshal(body, &gen); err != nil {
-		return nil //nolint:nilerr // intentional: non-generate/streaming responses must not fail the proxy
-	}
-	if !gen.Done {
+	if resp.Body == nil {
 		return nil
 	}
 
+	resp.Body = newTimingScanner(resp.Body, func(gen ollama.GenerateResponse) {
+		p.recordGenerateMetrics(gen, path)
+	})
+
+	return nil
+}
+
+// recordGenerateMetrics converts Ollama's nanosecond timing fields into
+// histogram observations and derived gauges.
+func (p *Proxy) recordGenerateMetrics(gen ollama.GenerateResponse, path string) {
 	info := p.mc.Get(context.Background(), gen.Model)
 	labels := make([]string, 0, 4)
 	labels = append(labels, gen.Model, info.Family, info.Quant)
@@ -190,6 +193,4 @@ func (p *Proxy) modifyResponse(resp *http.Response) error {
 	}
 
 	p.metrics.RequestsTotal.WithLabelValues(append(labels, path)...).Inc()
-
-	return nil
 }

@@ -28,8 +28,12 @@ model inventory and VRAM state. Always-on baseline — survives proxy failures.
 
 **Proxy** sits transparently in front of Ollama. Your application points at the
 exporter instead of Ollama directly. The exporter intercepts request/response pairs,
-extracts Ollama's timing fields from the JSON body, records histogram observations,
+extracts Ollama's timing fields from the response body, records histogram observations,
 then forwards the original response downstream. Latency overhead: microseconds.
+
+Both streamed (`"stream": true`, newline-delimited JSON) and non-streamed responses
+are instrumented. Streamed bodies are parsed line by line as they pass through, so
+tokens are never buffered and interactive streaming latency is preserved.
 
 If proxy health check fails, the exporter degrades gracefully to poller-only mode.
 Prometheus continues receiving model state metrics without interruption.

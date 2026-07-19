@@ -163,6 +163,16 @@ func TestProxy_TPSDerivation(t *testing.T) {
 		t.Fatalf("modifyResponse error: %v", err)
 	}
 
+	// Timings are extracted as the body streams through, so the response must
+	// be consumed the way the downstream client consumes it before the derived
+	// metrics are observable.
+	if _, err := io.Copy(io.Discard, fakeResp.Body); err != nil {
+		t.Fatalf("drain body: %v", err)
+	}
+	if err := fakeResp.Body.Close(); err != nil {
+		t.Fatalf("close body: %v", err)
+	}
+
 	tps := testutil.ToFloat64(m.TokensPerSecond.WithLabelValues("llama3.1:8b", "llama", "q4_k_m"))
 	if tps != 50.0 {
 		t.Errorf("tokens_per_second = %v, want 50.0", tps)

@@ -6,6 +6,24 @@ Versioning follows Semantic Versioning (https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Proxy mode now extracts inference timings from **streaming** responses.
+  Ollama returns newline-delimited JSON when `"stream": true` — the default for
+  `ollama run`, Open WebUI and most clients — and the timing fields appear only
+  on the final `done: true` line. The proxy unmarshalled the whole body as a
+  single JSON document, which fails on multi-line NDJSON, so
+  `ollama_tokens_per_second`, `ollama_prompt_tokens_per_second`,
+  `ollama_eval_duration_seconds`, `ollama_prompt_eval_duration_seconds`,
+  `ollama_kv_cache_pressure_ratio` and `ollama_requests_total` were never
+  recorded for streamed requests. Response bodies are now scanned line by line
+  as they pass through to the client.
+
+### Changed
+- The proxy no longer buffers `/api/generate` and `/api/chat` response bodies
+  before forwarding them, and sets `FlushInterval = -1` on the reverse proxy, so
+  streamed tokens reach the client as the upstream produces them instead of
+  after the response completes.
+
 ## [0.4.0] - 2026-04-29
 
 ### Added
