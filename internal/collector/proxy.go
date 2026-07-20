@@ -1,7 +1,6 @@
 package collector
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -90,14 +89,12 @@ func (p *Proxy) instrumentedHandler(next http.Handler) http.Handler {
 		model := r.URL.Query().Get("model")
 		endpoint := r.URL.Path
 
-		if r.Method == http.MethodPost &&
-			(endpoint == "/api/generate" || endpoint == "/api/chat") &&
-			r.Body != nil {
+		if r.Method == http.MethodPost && bodyCarriesModel(endpoint) && r.Body != nil {
 			bodyBytes, err := io.ReadAll(r.Body)
 			if err != nil {
 				slog.Debug("proxy: failed to read request body", "err", err)
 			}
-			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			r.Body = newReplayBody(bodyBytes)
 			r.ContentLength = int64(len(bodyBytes))
 			if len(bodyBytes) > 0 {
 				var req struct {
@@ -143,18 +140,85 @@ func (p *Proxy) modifyResponse(resp *http.Response) error {
 		return nil
 	}
 	path := resp.Request.URL.Path
-	if path != "/api/generate" && path != "/api/chat" {
-		return nil
-	}
 	if resp.Body == nil {
 		return nil
 	}
 
-	resp.Body = newTimingScanner(resp.Body, func(gen ollama.GenerateResponse) {
-		p.recordGenerateMetrics(gen, path)
-	})
+	switch {
+	case isNativeInferencePath(path):
+		resp.Body = newTimingScanner(resp.Body, func(gen ollama.GenerateResponse) {
+			p.recordGenerateMetrics(gen, path)
+		})
+	case isCompatInferencePath(path):
+		// The compatibility APIs never name the model in a streaming
+		// delta, so seed the scanner from the request body, which
+		// instrumentedHandler has already made re-readable.
+		resp.Body = newUsageScanner(resp.Body, modelFromRequest(resp.Request), func(u UsageSample) {
+			p.recordUsageMetrics(u, path)
+		})
+	}
 
 	return nil
+}
+
+// bodyCarriesModel reports whether a POST to endpoint names the model in
+// its request body rather than in a query parameter.
+func bodyCarriesModel(endpoint string) bool {
+	return isNativeInferencePath(endpoint) || isCompatInferencePath(endpoint)
+}
+
+// isNativeInferencePath matches the Ollama endpoints whose responses carry
+// full nanosecond timing fields.
+func isNativeInferencePath(path string) bool {
+	return path == "/api/generate" || path == "/api/chat"
+}
+
+// isCompatInferencePath matches the OpenAI- and Anthropic-compatible
+// endpoints. These report token counts but no durations, so throughput is
+// derived from proxy-measured wall time. /v1/messages/count_tokens is
+// deliberately excluded: it performs no inference.
+func isCompatInferencePath(path string) bool {
+	return path == "/v1/chat/completions" ||
+		path == "/v1/completions" ||
+		path == "/v1/messages"
+}
+
+// modelFromRequest re-reads the buffered request body to recover the model
+// name. instrumentedHandler replaces r.Body with a re-readable reader, so
+// this does not consume the copy sent upstream.
+func modelFromRequest(r *http.Request) string {
+	if r == nil || r.Body == nil {
+		return ""
+	}
+	body, ok := r.Body.(*replayBody)
+	if !ok {
+		return ""
+	}
+	var req struct {
+		Model string `json:"model"`
+	}
+	if json.Unmarshal(body.buf, &req) != nil {
+		return ""
+	}
+	return req.Model
+}
+
+// recordUsageMetrics converts compatibility-API token counts into the same
+// throughput gauges the native path populates.
+//
+// Only tokens-per-second and the request counter are recorded. The decode
+// and prefill duration histograms, and the derived KV cache pressure ratio,
+// are deliberately left untouched: those describe phases the compatibility
+// APIs do not report, and filling them with wall-clock approximations would
+// make them silently incomparable to the native path.
+func (p *Proxy) recordUsageMetrics(u UsageSample, path string) {
+	info := p.mc.Get(context.Background(), u.Model)
+	labels := []string{u.Model, info.Family, info.Quant}
+
+	tps := float64(u.OutputTokens) / u.Elapsed.Seconds()
+	p.metrics.TokensPerSecond.WithLabelValues(labels...).Set(tps)
+
+	p.metrics.RequestsTotal.WithLabelValues(append(labels, path)...).Inc()
 }
 
 // recordGenerateMetrics converts Ollama's nanosecond timing fields into
