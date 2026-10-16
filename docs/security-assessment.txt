@@ -1,0 +1,172 @@
+Final security gate: docs/security-gate.txt and validation/security-gate contain
+the Go 1.26.9 validation, remaining-finding decisions and final source provenance.
+The report below is retained as the earlier Go 1.25.9 checkpoint.
+
+Security applicability assessment, 2026-10-16
+
+Scope and evidence
+This assessment concerns cmd/exporter's executable and the source patch identified
+in validation/streaming-release/manifest.json. It does not certify an independently
+running Prometheus server, an Ollama upstream, or the test fixture as secure.
+The four requested advisories were reviewed individually against the maintainer
+advisories, the module source, imports, and HTTP registrations. Recommendation for
+these four: documented non-applicability to the shipped exporter. No dependency
+upgrade or vulnerability ignore was added. The scanner remains enabled and its
+nonzero text-mode result is retained, including other findings needing triage.
+
+All four Go OSV records specify module ranges without package/symbol narrowing
+(no ecosystem_specific.imports entries). Each of their scanner reports names:
+  1. Sender.Run -> processBatch -> encodeWriteRequest -> prompb.WriteRequest.Marshal
+  2. HTTP HandlerFunc -> testutil.MockReceiver.handle -> prompb.WriteRequest.Unmarshal
+  3. testutil.init -> prompb.init
+These are generated serialization/registration operations, not the components
+specified in the four maintainer advisories. Full symbol traces for EACH advisory
+are retained in validation/streaming-release/GO-2026-<ID>-traces.log, and the full
+scan in govulncheck.log. Official source OSV JSON records are retained alongside.
+
+Production dependency evidence: GOTOOLCHAIN=go1.25.9 go list -deps ./cmd/exporter
+imports ONLY github.com/prometheus/prometheus/prompb from the Prometheus module.
+It does not import storage/remote, storage/remote/azuread, web, web/api, or this
+repository's internal/remotewrite/testutil. See dependencies.log. The binary's
+build-info log records Go 1.25.9 and its actual module versions. Outbound remote
+write encoding calls Marshal in wire.go:48; it does not deserialize untrusted
+remote-write bodies. The whole ./... scan includes the mock receiver as a root,
+so its Unmarshal and init traces must not be mistaken for production handlers.
+The mock really does decode inbound data during localhost tests; it is not shipped
+or mounted by cmd/exporter. Its inclusion is explicit, not dismissed as unreachable
+merely because a symbol name seems harmless.
+
+GO-2026-5710 / GHSA-wg65-39gg-5wfj
+Condition: Azure AD OAuth configuration stores a client secret in a plain string
+and a Prometheus configuration API exposes it without secret redaction.
+The pinned upstream module contains the plain ClientSecret field in
+storage/remote/azuread/azuread.go:58. That package/type is absent from the exporter
+executable's dependencies; no Azure OAuth configuration or Prometheus config API
+is constructed or called. Exporter configuration supports its own outbound basic
+or bearer credentials referenced by files. Its explicit metrics mux registers only
+/metrics and /healthz. Module source present: yes. Affected component in executable:
+no. Called: no. Exposed by exporter: no. Documented non-applicability is recommended
+for this executable, rather than claiming the installed module is globally fixed.
+Source: https://github.com/prometheus/prometheus/security/advisories/GHSA-wg65-39gg-5wfj
+
+GO-2026-5662 / GHSA-vffh-x6r8-xx99
+Condition: Prometheus browser UI inserts crafted metric names/labels into HTML in
+graph tooltips, metrics exploration, or heatmaps. The exporter's executable contains
+no Prometheus UI package or asset server; it returns Prometheus text metrics through
+client_golang and forwards Ollama responses. It never runs the affected browser
+rendering code. The upstream module contains UI source, but that is not an imported
+Go component or a served asset here. Affected UI in executable: no. Called: no.
+Exposed: no. Recommend non-applicability to this exporter, without asserting that a
+separate downstream Prometheus installation is patched. Updating this exporter's
+protobuf dependency alone would not patch that separate server's UI.
+Source: https://github.com/prometheus/prometheus/security/advisories/GHSA-vffh-x6r8-xx99
+
+GO-2026-5381 / GHSA-fw8g-cg8f-9j28
+Condition: the legacy Prometheus heatmap browser UI renders attacker-controlled
+bucket labels as HTML. No legacy UI, heatmap renderer, Prometheus web handler, or
+old-ui feature flag exists in this executable. Generated histogram buckets and
+protobuf serialization do not themselves execute the affected JavaScript. Affected
+component in executable: no. Called: no. Exposed: no. Recommend documented
+non-applicability here; do not extend that conclusion to an external Prometheus
+server displaying exported metrics. Its own browser UI must be assessed separately.
+Source: https://github.com/prometheus/prometheus/security/advisories/GHSA-fw8g-cg8f-9j28
+
+GO-2026-5264 / GHSA-8rm2-7qqf-34qm
+Condition: Prometheus remote-read handling decodes a snappy request without checking
+the declared decoded length before allocating. The pinned module's
+storage/remote/codec.go:65-81 contains DecodeReadRequest and snappy.Decode(nil,...),
+called from read_handler.go:83. Those packages are absent from the executable.
+Exporter remote write is outbound; it uses snappy.Encode and protobuf Marshal.
+There is no local Prometheus /api/v1/read handler. The proxy's catch-all forwards
+unknown paths to its configured upstream, not to a local Prometheus decoder.
+Affected code present in downloaded module: yes. In executable: no. Called or
+exposed by exporter: no. Recommend documented non-applicability for the shipped
+exporter. The mock receiver's inbound decoding is test-only and is not a release
+endpoint; this conclusion is not a safety claim about that test harness.
+Source: https://github.com/prometheus/prometheus/security/advisories/GHSA-8rm2-7qqf-34qm
+
+G118: complete original configured-lint diagnostic
+internal/remotewrite/sender.go:256:29: G118: context cancellation function returned by WithCancel/WithTimeout/WithDeadline is not called (gosec)
+		return context.WithTimeout(parent, s.cfg.Timeout)
+		                          ^
+1 issues:
+* gosec: 1
+exit status 1
+
+Surrounding final code, including the one caller and the narrowly scoped suppression
+118: 	deadline := time.Time{}
+119: 	if s.cfg.MaxElapsed > 0 {
+120: 		deadline = time.Now().Add(s.cfg.MaxElapsed)
+121: 	}
+122:
+123: 	for attempt := 0; attempt < maxAttempts; attempt++ {
+124: 		sendCtx, cancel := s.sendContext(ctx)
+125: 		start := time.Now()
+126: 		err := sendWriteRequest(sendCtx, s.client, s.cfg.URL, body, s.composeHeaders())
+127: 		dur := time.Since(start)
+128: 		cancel()
+129:
+130: 		switch {
+253: // sendContext returns a per-attempt context bounded by Timeout (if set).
+254: func (s *Sender) sendContext(parent context.Context) (context.Context, context.CancelFunc) {
+255: 	if s.cfg.Timeout > 0 {
+256: 		return context.WithTimeout(parent, s.cfg.Timeout) //nolint:gosec // G118: processBatch owns and calls the returned cancel on every completed attempt; tested by TestSenderAttemptContextCancelled.
+257: 	}
+258: 	return parent, func() {}
+259: }
+260:
+
+Assessment: sendContext returns cancellation ownership to its one caller,
+processBatch. That caller calls cancel() after sendWriteRequest returns and before
+all result/retry branches. The Timeout-disabled branch borrows the parent and
+returns a no-op cancel. TestSenderAttemptContextCancelled checks an actual HTTP
+client with a custom transport, capturing the attempt context and verifying it is
+cancelled on success, non-retryable failure, and exhausted retry budget, with a
+one-hour deadline that cannot accidentally explain cancellation. The complete
+configured linter now reports zero issues. The suppression applies only to the
+WithTimeout return line; no gosec rule or file-wide exclusion was added. Future
+callers must retain the cancellation-ownership contract.
+
+Additional findings: unresolved release risk
+The Go 1.25.9 scan reports 24 symbol-level advisory findings: the four assessed
+above and 20 additional standard-library findings, plus 5 package-level and
+9 module-level findings. These are not all proven exploitable in this exporter.
+For example, platform and protocol configuration can matter. Full traces are
+retained rather than silently filtered. Their presence prevents claiming a clean
+security gate under the declared toolchain. They require separate component and
+exposure triage or testing with an appropriately patched, supported Go toolchain
+and a deliberate project toolchain update. This task did not change go.mod to
+hide the difference between Go 1.25.9 and the earlier Go 1.27 evidence.
+
+The final text scan uses govulncheck v1.1.4, built/run under Go 1.25.9 and querying
+the current Go vulnerability database. Tool versions v1.9.0 and v1.8.0 require
+Go >=1.26 and cannot be built with GOTOOLCHAIN=go1.25.9; the attempted v1.9.0 rejection
+is retained in govulncheck-detailed.log. JSON-mode scanner exit 0 means the event
+stream was produced, not that no findings exist. Text scan exits 3 inside the tool
+(go run returns 1). No scan result is labeled a security pass.
+
+The full symbol-level IDs (including the four assessed above) are:
+GO-2026-6617
+GO-2026-6613
+GO-2026-6612
+GO-2026-6611
+GO-2026-6610
+GO-2026-6608
+GO-2026-6607
+GO-2026-6605
+GO-2026-6603
+GO-2026-6218
+GO-2026-6090
+GO-2026-6089
+GO-2026-5972
+GO-2026-5856
+GO-2026-5710
+GO-2026-5662
+GO-2026-5381
+GO-2026-5264
+GO-2026-5039
+GO-2026-5037
+GO-2026-5026
+GO-2026-4976
+GO-2026-4971
+GO-2026-4918

@@ -28,11 +28,73 @@ model inventory and VRAM state. Always-on baseline — survives proxy failures.
 
 **Proxy** sits transparently in front of Ollama. Your application points at the
 exporter instead of Ollama directly. The exporter intercepts request/response pairs,
-extracts Ollama's timing fields from the JSON body, records histogram observations,
-then forwards the original response downstream. Latency overhead: microseconds.
+observes Ollama's response fields while forwarding the original bytes downstream.
+Native `/api/generate` and `/api/chat` support NDJSON streaming and single-object
+`stream:false` responses. Unknown fields, including thinking content, pass through
+unchanged; live thinking-model and Open WebUI rendering remain untested. Each read is flushed promptly;
+response bodies are neither accumulated nor read ahead by the metrics observer.
 
 If proxy health check fails, the exporter degrades gracefully to poller-only mode.
 Prometheus continues receiving model state metrics without interruption.
+
+### Compatibility routes and usage
+
+POST `/v1/chat/completions`, `/v1/completions` (OpenAI), and `/v1/messages`
+(Anthropic) support JSON and `text/event-stream` SSE responses. Other routes,
+including `/v1/messages/count_tokens`, are forwarded without inference extraction.
+SSE handles fragmented reads, CRLF, multiline `data:` events, `[DONE]`, and
+Anthropic counts split between `message_start` and `message_delta` followed by
+`message_stop`. Successful HTTP responses must reach clean EOF; SSE must also
+include its terminal marker. Truncated, cancelled, malformed, and error responses
+do not create completion observations. Request duration and in-flight cleanup
+still run on reverse-proxy aborts. Duration measures proxy handling from handler entry through body forwarding or
+abort, including request-prefix inspection but excluding metadata lookup.
+
+Compatibility usage availability depends on the Ollama version and route. OpenAI
+clients should request `stream_options: {"include_usage": true}` when their server
+supports it. Streams without that option may omit usage. The exporter forwards
+requests unchanged: it does not inject this option or add usage frames. No specific
+installed-server support is assumed. Missing or null counts produce **no** token
+observation; an explicit zero produces one zero-valued observation.
+
+`ollama_compatibility_input_tokens` and `ollama_compatibility_output_tokens` are
+histograms of reported primary counts per completed request, with `model`, `family`,
+`quant`, and `endpoint` labels. Their `_sum` values accumulate known tokens and
+`_count` values count requests that reported each field. Use `rate(..._sum[5m])`
+for aggregate reported token throughput over a scrape window. This is not a
+per-request decode speed. No wall-time throughput or native phase timing is
+fabricated for compatibility routes. Input counts are API-specific: separate
+Anthropic cache-read/cache-creation token fields are not added to `input_tokens`
+or exported as cache metrics. The input histogram is not a normalized cross-API
+prompt total. Native `ollama_tokens_per_second` retains
+its `eval_count / eval_duration` meaning; native prompt throughput retains
+`prompt_eval_count / prompt_eval_duration`.
+
+`ollama_requests_total` counts native completed (`done:true`) inferences and
+completed compatibility responses, including compatibility responses with no
+usage. It does not count every HTTP request; the duration histogram counts
+proxied requests unless their paths are configured as excluded. Non-2xx responses
+are forwarded without inference extraction. Exclusions also disable extraction.
+
+The parser uses no new dependencies. It validates JSON incrementally, skipping
+large generated strings and context arrays with bounded storage; there is no
+object or line size limit. Nesting beyond 64 levels or selected scalar values
+beyond 4096 encoded bytes disables extraction while forwarding continues. Field
+names beyond 128 encoded bytes are ignored. Request model lookup retains and
+replays at most the first 64 KiB, closing the original body normally. If `model`
+occurs later, request duration/in-flight labels use the query model or an empty
+model; inference labels use a response model when available. Model metadata still
+uses the existing cache and fallback behavior.
+
+Extraction diagnostics use bounded reason labels to distinguish missing usage,
+incomplete responses, invalid fields, malformed JSON, upstream errors, and parser
+limits. Oversized field names have a separate skip counter so useful metrics from
+other fields remain visible. See [the metric reference](docs/metrics.md#extraction-diagnostics-proxy-mode).
+CI and scheduled scans use [the shared production vulnerability gate](docs/vulnerability-gate.md).
+For project-toolchain validation and security applicability, see
+[the final security gate](docs/security-gate.txt),
+[the earlier release assessment](docs/release-validation.txt), and
+[the Ollama 0.40.3 live results](docs/live-validation.txt).
 
 ### Output: Pull and/or Push
 
@@ -75,7 +137,9 @@ configs against Mimir and Grafana Cloud.
 | `ollama_tokens_per_second` | Gauge | Derived: eval_count / eval_duration |
 | `ollama_prompt_tokens_per_second` | Gauge | Derived: prompt_eval_count / prompt_eval_duration |
 | `ollama_requests_in_flight` | Gauge | Current concurrent requests (proxy mode) |
-| `ollama_requests_total` | Counter | Total requests by model and endpoint |
+| `ollama_requests_total` | Counter | Completed inferences by model and endpoint |
+| `ollama_compatibility_input_tokens` | Histogram | Reported input counts per completed compatibility request |
+| `ollama_compatibility_output_tokens` | Histogram | Reported output counts per completed compatibility request |
 | `ollama_kv_cache_pressure_ratio` | Gauge | Derived: prompt eval duration / token ratio trend |
 
 #### GPU Metrics (AMD, amdgpu driver)

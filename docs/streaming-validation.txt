@@ -1,0 +1,189 @@
+Historical mixed-toolchain evidence from the initial implementation.
+The follow-up Go 1.25.9 validation and security assessment is in
+docs/release-validation.txt and docs/security-assessment.txt. Do not treat the
+Go 1.27 test results below as project-declared-toolchain validation.
+
+Validation performed on 2026-10-16
+
+Checkout and scope
+The starting working tree was clean on main at
+724e59104b12beb651c0465addeebd1c4b096431. No applicable AGENTS.md was found
+in the repository or its ancestor directories. PR #24 still pointed to the
+reviewed 607311f53c1236cd2e1be0bd8cab8a3868dbed69. PR #25 pointed to
+d69516997a84257deeb91f674a196d5dbb382246 and included #24's changes.
+The implementation was written in this checkout rather than merging either PR.
+PR #26's macOS changes were not included. No push, merge, review, deployment,
+service restart, machine configuration change, or model download was performed.
+
+Changed files
+Shared parsing/forwarding and native metric extraction:
+  internal/collector/proxy.go
+  internal/collector/streamjson.go
+  internal/collector/responsebody.go
+Compatibility accounting and registration:
+  internal/collector/usage.go
+  internal/metrics/registry.go
+Regression tests and allocation benchmarks:
+  internal/collector/proxy_stream_test.go
+  internal/collector/responsebody_test.go
+  internal/collector/usage_test.go
+  internal/collector/poller_test.go (drain/close before asserting observations)
+Documentation:
+  README.md
+  CHANGELOG.md
+  docs/metrics.md
+  docs/streaming-validation.txt
+No project dependencies were added or changed.
+
+Behavior and semantics
+POST /api/generate and /api/chat preserve response bytes and native throughput
+semantics. No whole-response or whole-line allocation occurs. ReverseProxy uses
+immediate flushing. Duration recording is deferred and ErrAbortHandler propagates.
+Upstream read errors and early Close never synthesize completion observations.
+Request duration now includes request-prefix inspection and excludes the final
+model metadata lookup. Requests whose initial body read fails return 400 and still
+receive one duration observation unless their path is excluded.
+
+POST /v1/chat/completions, /v1/completions, and /v1/messages support JSON and SSE.
+/v1/messages/count_tokens is forwarded without inference extraction. Compatibility
+counts use separate input/output token histograms; missing/null usage is unobserved,
+and explicit zero is observed once. No native timing or wall-time TPS is invented.
+Completed compatibility responses increment requests_total even without usage.
+Requests, including stream_options.include_usage, are forwarded unchanged.
+
+Focused regressions
+Command: go test ./internal/collector -count=1 -v
+Result: PASS. Complete local log: /tmp/ollama-exporter-focused.log
+Tests use isolated registries, real HTTP proxy servers and fake Ollama upstreams.
+They exercise both native routes and response shapes, exact status/header/trailer
+and body forwarding, token fixtures (100 / 4s = 25; 16 / 0.125s = 128), request
+labels, large objects of exactly 1048575/1048576/1048577 bytes and 4 MiB, large
+ignored strings/context arrays/numbers, field order, escapes and fragmented tokens.
+SSE tests include single-byte reads, multiline data, CRLF, [DONE], escaped
+message_stop, Anthropic split usage, missing/zero/null usage, and final bytes with
+EOF and no trailing newline. Abort, cancellation, truncation, malformed/error
+responses, upstream body closure, repeated EOF/Close, excluded/unaffected paths,
+request-body failures, no read-ahead, and 20 concurrent streams are covered.
+
+First-token evidence (mock HTTP, not live inference)
+Command: go test ./internal/collector -run TestFirstTokenBeforeCompletion -v
+Result: PASS for /api/generate, /api/chat, /v1/chat/completions, /v1/completions,
+and /v1/messages. Each upstream flushed its first event and then waited on a
+channel. The client read the exact first event before the test released completion.
+Timeouts bound hangs; no elapsed-time threshold determines streaming success.
+
+Reviewed PR #24 reproduction
+The exact reviewed snapshot was extracted under /tmp/ollama-pr24-reproduction.
+Command there: go test ./internal/collector -run 'TestReviewed' -count=1
+Result: EXPECTED FAIL. TestReviewedLargeFinal/nonstream and /stream each observed
+zero eval histogram samples for a valid >1 MiB final object (expected one).
+TestReviewedAbortDuration observed zero duration samples after ErrAbortHandler
+(expected one). TestReviewedUpstreamAbortDuration reproduced the same zero count
+through real HTTP servers with a truncated upstream body: ReverseProxy logged
+"read error during body copy: unexpected EOF" and preserved the client abort.
+Reproduction source: internal/collector/review_findings_test.go
+in that temporary snapshot. Current regression tests cover these failures plus
+real ReverseProxy upstream truncation and client cancellation paths.
+
+Full suite and static checks
+Command: go test ./...
+Result: PASS, all packages.
+Command: go test -race -coverprofile=/tmp/ollama-exporter-coverage.out -covermode=atomic ./...
+Result: PASS, all packages; no race reports. Final output follows below.
+Command: go tool cover -func=/tmp/ollama-exporter-coverage.out
+Result: total statement coverage 72.4%; collector coverage 80.8%.
+Command: go vet ./...
+Result: PASS.
+Command: go build -o /tmp/ollama-exporter-validation ./cmd/exporter
+Result: PASS.
+Commands: git diff --check; gofmt -l .
+Result: PASS, no output.
+Command: go test ./internal/collector -run '^$' -fuzz FuzzJSONFields -fuzztime=10s -parallel=2
+Result: PASS; final run executed 195218 fuzz cases. The fuzz target checks valid
+JSON recognition against encoding/json; malformed fixtures have separate tests.
+This is a finite fuzz run, not a proof of complete grammar coverage.
+
+Configured linter
+Command: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.0 run --timeout=5m
+Result with workstation Go 1.27: tool cannot decode Go export data version 5.
+Command: GOTOOLCHAIN=go1.25.9 go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.0 run --timeout=5m
+Result: one G118 finding at internal/remotewrite/sender.go:256. The exact same
+finding occurs on the unmodified base 724e591 in /tmp/ollama-base-validation.
+No findings remain in changed code. The pre-existing remote-write code was not
+changed to suppress this tool diagnostic. Toolchain download affected Go caches,
+not project dependencies or machine configuration.
+
+Vulnerability check
+Command: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+Tool version resolved: golang.org/x/vuln v1.9.0.
+Result: findings GO-2026-5710, GO-2026-5662, GO-2026-5381, GO-2026-5264 against
+unchanged github.com/prometheus/prometheus v0.51.2. Repeating the command on the
+reviewed PR snapshot gives the same four findings. The scan exits nonzero (the
+tool reports exit status 3; go run exits 1). Exploitability of advisory scenarios
+in this exporter has not been established here; no unrelated dependency upgrade
+was included.
+
+Versions and local service checks
+Tests/build/vet: go version go1.27.2-X:nodwarf5 linux/amd64.
+CI linter fallback: Go 1.25.9.
+Installed Ollama CLI: 0.40.3 (ollama --version warns no instance is reachable).
+Ollama SERVER version and live model behavior: unavailable, not inferred from CLI.
+Commands: curl -sS http://127.0.0.1:11434/api/version
+          curl -sS http://127.0.0.1:11434/api/tags
+Both fail with connection refused, including outside the sandbox. ss -ltnp shows
+no Ollama listener there. No configured alternate OLLAMA_HOST was found.
+Actual installed-server usage behavior with/without include_usage and live model
+first-token latency could not be verified. All inference evidence above is from
+mock fixtures, not a claim about this workstation's Ollama server.
+
+Temporary binary smoke check (not live inference)
+Command: python3 /tmp/ollama-exporter-smoke.py
+Script/config: /tmp/ollama-exporter-smoke.py, /tmp/ollama-exporter-smoke.yml
+Binary: /tmp/ollama-exporter-validation
+Latest run used only 127.0.0.1:56471 (metrics) and 127.0.0.1:40401 (proxy).
+/healthz=200, /metrics=200, /api/generate=502 for the unavailable upstream.
+Only the temporary exporter process was terminated; clean exit code 0.
+Startup log: /tmp/ollama-exporter-smoke.log
+
+Remaining limits
+The parser permits nesting through 64 levels, retains selected scalar values
+through 4096 encoded bytes, and ignores field names beyond 128 encoded bytes.
+Structural/selected-value limits disable metrics while preserving forwarded bytes.
+Request model lookup examines at most 64 KiB. A later model uses the query value
+or empty duration/in-flight model label; a response model still supplies inference
+labels. This behavior has a regression test. Compatibility SSE requires clean EOF
+and a terminal marker; an otherwise useful usage frame without terminal completion
+is deliberately not counted. Usage can be unavailable depending on Ollama version
+and route; the exporter does not alter requests to obtain it.
+Benchmarks below measure parser allocations for generated inputs, not total
+process RSS, network buffers, or long-lived model-cache/metric cardinality.
+These tests do not establish that all possible regressions are prevented.
+
+Final full race/coverage output
+	github.com/maravexa/ollama-exporter/cmd/exporter		coverage: 0.0% of statements
+ok  	github.com/maravexa/ollama-exporter/internal/collector	44.141s	coverage: 80.8% of statements
+ok  	github.com/maravexa/ollama-exporter/internal/config	(cached)	coverage: 82.4% of statements
+ok  	github.com/maravexa/ollama-exporter/internal/gpu	(cached)	coverage: 86.3% of statements
+	github.com/maravexa/ollama-exporter/internal/metrics		coverage: 0.0% of statements
+ok  	github.com/maravexa/ollama-exporter/internal/ollama	(cached)	coverage: 62.8% of statements
+ok  	github.com/maravexa/ollama-exporter/internal/remotewrite	(cached)	coverage: 75.0% of statements
+	github.com/maravexa/ollama-exporter/internal/remotewrite/testutil		coverage: 0.0% of statements
+ok  	github.com/maravexa/ollama-exporter/test/e2e	(cached)	coverage: [no statements]
+
+Bounded-memory benchmark
+Command: go test ./internal/collector -run '^$' -bench 'BenchmarkBounded' -benchtime=1x -benchmem
+Input is generated using repeatReader/LimitReader, not prebuilt at payload size.
+Each operation must recover the terminal sample. String and context-array inputs
+grow from 1 to 16 to 64 MiB. The allocation results follow:
+goos: linux
+goarch: amd64
+pkg: github.com/maravexa/ollama-exporter/internal/collector
+cpu: AMD Ryzen 7 H 255 w/ Radeon 780M Graphics
+BenchmarkBoundedParser/1048576-16  	       1	   2466644 ns/op	 425.10 MB/s	   34512 B/op	      80 allocs/op
+BenchmarkBoundedParser/16777216-16 	       1	  40870786 ns/op	 410.49 MB/s	   32408 B/op	      58 allocs/op
+BenchmarkBoundedParser/67108864-16 	       1	 152712565 ns/op	 439.45 MB/s	   32408 B/op	      58 allocs/op
+BenchmarkBoundedContextArray/1048576-16         	       1	  11706047 ns/op	  89.58 MB/s	   19976 B/op	      50 allocs/op
+BenchmarkBoundedContextArray/16777216-16        	       1	 160336449 ns/op	 104.64 MB/s	   19976 B/op	      50 allocs/op
+BenchmarkBoundedContextArray/67108864-16        	       1	 620246254 ns/op	 108.20 MB/s	   19976 B/op	      50 allocs/op
+PASS
+ok  	github.com/maravexa/ollama-exporter/internal/collector	0.998s

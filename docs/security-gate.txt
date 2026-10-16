@@ -1,0 +1,143 @@
+Final security/lint gate, 2026-10-16
+
+Result and scope
+The declared minimum Go version and Docker builder are now Go 1.26.9 (previously
+1.25.9 and 1.22-alpine respectively). This fixes the 33 standard-library findings
+in the earlier captured scan. Some implicated actual HTTP/TLS/proxy paths: they
+were not dismissed as unreachable. No module dependency versions, runtime feature
+behavior, CI vulnerability checks, services, or model installations were changed
+in this security follow-up. Existing streaming work remains in the source patch.
+Official release metadata and Docker builder tag metadata are retained. There is
+no Docker/Podman engine on this workstation: the image itself was not built.
+
+Provenance
+validation/security-gate/manifest.json identifies the exact base revision and
+SHA-256 of source.patch, source file hashes, tested binary hashes, command statuses,
+and toolchain. The patch includes all tracked and untracked source/documentation
+changes against HEAD, excluding validation/** to avoid self-reference. Strict patch
+application and file hash comparison against a fresh base tree are recorded in
+source-replay.log. SHA256SUMS covers the retained artifact bundle. Historical
+streaming-release and live-ollama evidence remains separate and unchanged; those
+Go 1.25.9 results and earlier Go 1.27.2 tests are not reused as Go 1.26.9 passes.
+No commit, push, merge, deployment or restart of an existing service was performed.
+
+Commands and results
+capture.py records exact argv, independent exit status, UTC start/end and logs.
+All commands below use GOTOOLCHAIN=go1.26.9, Linux amd64 unless specified.
+  go test -count=1 ./...                                        PASS
+  go test -race -count=1 -coverprofile=<bundle>/coverage.out
+      -covermode=atomic ./...                                  PASS; no race reports
+  go vet ./...                                                PASS
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build
+      -o /tmp/ollama-security-gate/exporter ./cmd/exporter       PASS
+  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build
+      -o /tmp/ollama-security-gate/exporter-arm64 ./cmd/exporter PASS; cross-build only
+  go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.0
+      run --timeout=5m                                        PASS; 0 issues
+  go test ./internal/remotewrite -run TestSenderAttemptContextCancelled
+      -count=1 -v                                             PASS; 200,400,503 cases
+  go tool cover -func=<bundle>/coverage.out                   PASS; total 73.2%
+  go list -deps ./cmd/exporter                                 PASS; dependencies.log
+  go run golang.org/x/vuln/cmd/govulncheck@v1.9.0
+      -show=traces,verbose ./...                               FINDINGS; go run exit 1
+  same scan with ./cmd/exporter                                FINDINGS; go run exit 1
+  same scanner -json ./...                                    CAPTURE exit 0, not a pass
+  python3 validation/security-gate/adjudicate.py                ASSESSMENT_PASS
+
+The raw text scanner exits 3 underneath go run. It still reports four symbol-level
+Prometheus advisories and one module-only Windows advisory; no standard-library
+or package-only findings remain. CI's existing raw govulncheck job will still fail
+on these reports. No silent ignore or blanket scanner suppression was added.
+The assessment script checks the exact remaining IDs, production dependencies,
+Linux release matrix and declared toolchain for this snapshot. It is an evidence
+consistency check, not an independent vulnerability detector or permanent allowlist.
+Changed imports, routes, targets, dependency versions or advisories need re-review.
+
+Full diagnostics and applicability
+The complete before scan is validation/streaming-release/govulncheck.log; complete
+after scans, JSON events and individual four-advisory traces are retained under
+validation/security-gate. decisions.json accounts for all 38 earlier finding IDs:
+33 fixed, five documented not applicable in the executable's Linux release scope.
+Official OSV JSON and maintainer advisory references are retained. The earlier
+docs/security-assessment.txt contains component source locations and registrations.
+
+Each of the four Prometheus OSV records marks the module as affected without
+package/symbol narrowing. The production-only scan reports actual generated
+protobuf calls: main -> Pusher.Run -> Sender.Run -> processBatch ->
+encodeWriteRequest -> prompb.WriteRequest.Marshal, and main.init -> remotewrite.init
+-> prompb.init. Those operations ARE called; that does not implement the affected
+components described by these advisories. The only linked Prometheus-module
+package is prompb. The full ./... scan additionally reports a test receiver's
+Unmarshal call through HandlerFunc; the production-only scan excludes that trace.
+The fixture's decoding path is not shipped or registered by cmd/exporter.
+
+ID             Module present?  Affected component present/called/exposed?
+GO-2026-5710   yes              no/no/no: Azure AD OAuth config serialization and
+                               Prometheus config API are absent. Exporter does
+                               not construct Azure credentials or that endpoint.
+GO-2026-5662   yes              no/no/no: Prometheus tooltip/explorer browser code
+                               and assets are absent and not served.
+GO-2026-5381   yes              no/no/no: legacy Prometheus heatmap browser code
+                               and assets are absent and not served.
+GO-2026-5264   yes              no/no/no: Prometheus /api/v1/read handler and its
+                               snappy.Decode path are absent. Exporter remote
+                               write uses outbound Marshal and snappy.Encode.
+                               Arbitrary proxy paths go to configured Ollama;
+                               they do not register a local Prometheus decoder.
+GO-2026-5024   yes              no/no/no on Linux: x/sys/windows.NewNTUnicodeString
+                               is excluded from Linux amd64/arm64 dependencies.
+                               Reassess/update x/sys before adding Windows.
+
+Recommendation: accept documented non-applicability for these five in this exact
+Linux exporter scope, retaining raw diagnostics. This does not certify separately
+running Prometheus/Ollama services, browser dashboards or the test fixture.
+Module source being on disk was neither treated as proof of exploitability nor
+ignored without checking production imports, handlers and the described component.
+
+G118 diagnostic and cancellation ownership
+The full original diagnostic is copied to G118-before.log; G118-source.txt includes
+numbered surrounding helper/caller source. Original diagnostic:
+  internal/remotewrite/sender.go:256:29: G118: context cancellation function returned by WithCancel/WithTimeout/WithDeadline is not called (gosec)
+          return context.WithTimeout(parent, s.cfg.Timeout)
+                                    ^
+  1 issues:
+  * gosec: 1
+  exit status 1
+
+sendContext deliberately returns context and CancelFunc to processBatch. That
+caller calls cancel immediately after sendWriteRequest, before every success,
+error and retry branch. No early return occurs between acquiring and cancelling
+in ordinary completion paths. The timeout-disabled branch returns parent/no-op.
+A single existing return expression has a scoped nolint:gosec annotation naming
+G118 and ownership; the rule is otherwise enabled. TestSenderAttemptContextCancelled
+verifies success/400/503 transports receive context cancellation before the long
+configured deadline. This is a documented interprocedural false positive, not a
+claim that a timeout substitutes for cancellation. The full suite, race tests and
+configured lint all passed with the annotation and regression test.
+
+Live verification of the rebuilt binary
+validation/security-gate/live/direct-report.json records five direct-upstream
+streams using the Go 1.26.9 binary, existing server 0.40.3 and installed gemma3:4b.
+Native generate/chat, OpenAI chat/completions (include_usage=true), and Anthropic
+messages all returned 200, content before completion, duration/completion exactly
+once and in-flight zero. First native generate content took 4.243s, completion
+5.399s; subsequent routes first content took 96-99ms, completion 1.234-1.237s.
+This is direct HTTP smoke evidence, not a deterministic latency bound or a UI test.
+server-and-cleanup.json records actual /api/version, installed model metadata and
+closure of both temporary localhost listeners. No response contents were retained.
+The earlier 14-case byte-fidelity/usage presence/absence matrix remains under
+validation/live-ollama and docs/live-validation.txt; it used the separate Go 1.25.9
+binary. This follow-up did not repeat that entire matrix or the parser benchmark.
+Live thinking-model behavior and Open WebUI rendering are explicitly untested;
+this release does not claim live UI support. Parser bounds/allocations and framing
+are covered by the earlier retained tests/benchmark; the unchanged tests also pass
+under the new compiler. No assertion is made that all regressions are prevented.
+
+Sources
+https://go.dev/dl/?mode=json
+https://go.dev/doc/devel/release#go1.26.9
+https://github.com/prometheus/prometheus/security/advisories/GHSA-wg65-39gg-5wfj
+https://github.com/prometheus/prometheus/security/advisories/GHSA-vffh-x6r8-xx99
+https://github.com/prometheus/prometheus/security/advisories/GHSA-fw8g-cg8f-9j28
+https://github.com/prometheus/prometheus/security/advisories/GHSA-8rm2-7qqf-34qm
+https://pkg.go.dev/vuln/GO-2026-5024

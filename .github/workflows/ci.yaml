@@ -61,8 +61,22 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Run govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest && govulncheck ./...
+      - name: Test vulnerability gate
+        shell: bash
+        run: python3 -m unittest discover -s scripts -p 'test_vulnerability_gate.py' -v 2>&1 | tee vulnerability-gate-tests.log
+
+      - name: Assess production vulnerabilities
+        run: python3 scripts/vulnerability_gate.py --output vulnerability-results
+
+      - name: Retain vulnerability evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vulnerability-results-${{ github.job }}
+          path: |
+            vulnerability-results/
+            vulnerability-gate-tests.log
+          if-no-files-found: error
 
   build-verify:
     runs-on: ubuntu-latest

@@ -1,0 +1,192 @@
+Release container validation, 2026-10-16
+
+Result
+Both actual release image targets built successfully. The Linux amd64 image passed
+24 isolated HTTP smoke cases. Linux arm64 is BUILD-ONLY: its packaged binary was
+extracted and verified without starting a container. No arm64 emulator/registration
+was available and none was installed. There was no product/packaging defect requiring
+a source change. All test containers, private networks, mock images and uniquely
+named release-test images were removed; shared base-image/build caches were retained.
+
+Source and provenance
+HEAD remains 724e59104b12beb651c0465addeebd1c4b096431; existing uncommitted work was
+preserved. All 89 files from the supplied source patch matched at entry:
+  faba739161645e8408d68be58cf212e9e2510a706030fefad1198149df983e53
+The prior prerequisite checkpoint added this document only, producing the exact
+source patch used during these builds/tests:
+  75de597f9e6d2619c17e9bc7b89552f3870e0bbc17f2c5dc1c3d76f0914a0174
+A copy is release-runtime/tested-source.patch. New fixture/driver/evidence files
+are under validation/**, excluded from source patches to avoid self-reference.
+This final report updates only docs/container-validation.txt outside that directory.
+The final documentation-inclusive source patch/hash and source file hashes are in
+validation/container/release-runtime/manifest.json, with strict patch-replay proof.
+The streaming implementation, release definitions and reviewed vulnerability gate
+were unchanged. No commit, tag, push, merge, publish, deployment or remote workflow
+was performed. Earlier validation/container/manifest.json and SHA256SUMS retain the
+initial blocked checkpoint and are historical, not the final result.
+
+Actual release path reproduced
+The tag-triggered release workflow configures Go from go.mod, QEMU and Buildx, then
+runs GoReleaser release --clean. That publishing command was NOT invoked locally.
+.goreleaser.yaml compiles ./cmd/exporter with CGO_ENABLED=0 for Linux amd64/arm64,
+using -s -w -X main.Version={{.Version}}, and packages both with Dockerfile.release.
+The latter copies the prebuilt binary into gcr.io/distroless/static:nonroot; it
+sets USER nonroot:nonroot, ENTRYPOINT /ollama-exporter and ports 9400/9401.
+The multistage Dockerfile (golang:1.26.9-alpine builder) is not the published image
+path and was not substituted. Instead, the unmodified Dockerfile.release was built
+by local rootless Podman using the configured flags and corresponding prebuilt
+binaries. A local smoke version was stamped consistently into binary/image labels:
+  0.0.0-ollama-container-build-ksmnvx63
+GoReleaser's before-hook was checked with go mod tidy -diff: exit 0, no changes.
+Each target base was pulled and inspected immediately before a --pull=never build;
+the final image's base-layer prefix was verified against that inspected base.
+
+Tool versions and permissions
+Exporter and mock compiler: go1.26.9 linux/amd64. Both packaged exporter binaries
+report go1.26.9, CGO_ENABLED=0 and the correct target GOOS/GOARCH in Go build info.
+Podman: 6.1.4, rootless=true, serviceIsRemote=false; Buildah 1.45.2, crun 1.30.1.
+Podman's own build reports Go 1.27.2-X:nodwarf5; that is NOT the exporter toolchain.
+The user installed Podman before this run; the agent installed no software, started
+no daemon and changed no groups, socket permissions, firewall, services or binfmt.
+Podman operations used --remote=false outside the filesystem sandbox, still as
+regular uid 1001. No privileged container, host networking or socket mount was used.
+
+The actual exporter process ran as nonroot, mapped host UID 231067, with zero
+CapEff (0000000000000000). Default packaged USER/ENTRYPOINT were retained; no --user
+or privilege override was added. A generated read-only config was readable; startup,
+/healthz (HTTP 200, empty body), upstream health and /metrics succeeded. The image
+does not declare a Docker HEALTHCHECK; the HTTP endpoint was checked explicitly.
+Only synthetic /tmp configuration was mounted; no production configuration/data was
+mounted. Host HTTP proxy variables were not injected into test containers
+(--http-proxy=false), avoiding credential propagation and keeping backend traffic
+inside the private test network. This changed no host proxy/network settings.
+
+Resolved image identities
+Shared base manifest-list/index digest, as recorded in pulled RepoDigests:
+  sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3
+Per-platform base manifest digests (.Digest):
+  amd64 sha256:2293b36c7c9082bf4115aab724b4d2cddec82c8eba39bf27ac0517e159acf150
+  arm64 sha256:dd804b6c91a33a478f9a56e5033f463007696c2934a73303eb186767226bc33d
+Base config/image IDs:
+  amd64 55a757dc8ab862a4eb634c434261dcd26f17c186b54f7bce845404a335456110
+  arm64 bcff74c94c33712c3758af70114dfb388180cf43e789031b9a6d4195195bf97e
+Actual local exporter config/image IDs:
+  amd64 e590d12242a9a114e402f908b731d5fd37ff1960bd350a3b50ca47e794f832c2
+  arm64 72edbcabf3ada308f574610c651e3c3235d64e8fcc8aefbd35080802dda11653
+Local exporter manifest digests:
+  amd64 sha256:d65b47c333cb613cd6d37d329a41248e64a6f52d376bf0a12f62b5579a1ca99d
+  arm64 sha256:79133e26192189f75dc6982155c219798a08b4b8ac8b9ad9147548f5df203841
+Podman populated localhost/...@sha256 references in RepoDigests during LOCAL builds.
+These are not registry-confirmed published RepoDigests. No exporter image was pushed.
+Full raw image/config/base inspection is retained under release-runtime/build/.
+
+Packaged exporter binary SHA-256 (extracted from each actual image and matched
+byte-for-byte to the corresponding prebuilt release binary):
+  amd64 ed35b54765cc5d46acc5659177ea5bba23c21d4593d91ca0a278d8198f0bd888
+  arm64 72c1c418e2063480ba42478ee98a3076239ae9456cf1b95b2711ef2ab21935c3
+The arm64 extraction used podman create/cp/rm, never start/run. Full build metadata
+is retained in smoke-final/packaged-binary-metadata.stdout and
+arm64-packaged-binary/metadata.stdout. Executable payloads stay in /tmp, not the repo.
+
+Exact commands/results
+validation/container/build-release-local.sh records argv and independent command
+exit statuses in its /tmp run directory, retained under release-runtime/build/:
+  bash validation/container/build-release-local.sh               PASS
+  GOTOOLCHAIN=go1.26.9 CGO_ENABLED=0 GOOS=linux GOARCH=<target>
+    GOFLAGS=-mod=readonly GOWORK=off go build
+    -ldflags '-s -w -X main.Version=0.0.0-ollama-container-build-ksmnvx63'
+    -o <isolated-context>/ollama-exporter ./cmd/exporter           PASS, both targets
+  podman --remote=false pull --platform linux/<target>
+    gcr.io/distroless/static:nonroot                             PASS, both targets
+  podman --remote=false build --platform linux/<target> --pull=never
+    --file <context>/Dockerfile.release --tag <unique-local-tag>
+    --label org.opencontainers.image.version=<smoke-version>
+    --label org.opencontainers.image.source=https://github.com/maravexa/ollama-exporter
+    <context>                                                  PASS, both targets
+  python3 -B validation/container/smoke.py
+    /tmp/ollama-container-build-KSMnVX63 /tmp/ollama-container-smoke-final
+                                                               PASS, 24 image cases
+  GOTOOLCHAIN=go1.26.9 python3 -B validation/container/extract-arm64.py
+                                                               PASS, metadata only
+  python3 -B validation/container/cleanup-release.py             PASS
+  python3 -B -m unittest discover -s scripts
+    -p test_vulnerability_gate.py -v                            PASS, 19 gate tests
+  go list ./...                                                PASS; mock's ignore
+    build constraint keeps it out of production/test package discovery
+  git diff --check                                             PASS
+Individual smoke and cleanup subprocess argv/status/duration logs are retained in
+commands.json files. Build-step exit statuses, exact shell-quoted command log and
+log-file modification times are retained; those file times are not represented as
+precise execution start timestamps. Earlier full Go/race/vet/lint evidence remains
+separate; this container follow-up did not rerun that whole suite or the live scan.
+
+Final actual-image matrix and assertions
+- Native generate/chat: JSON and NDJSON (four cases).
+- OpenAI /v1/chat/completions and /v1/completions: JSON with/without usage, streams
+  include_usage true/false/omitted (ten cases).
+- Anthropic /v1/messages: JSON/SSE with/without usage (four cases).
+- Native generate and OpenAI chat: client cancellation, upstream disconnect after
+  first content and non-2xx error fidelity (six cases).
+- Every completed response preserved exact bytes (hash evidence), status 201/503,
+  Content-Type, X-End-To-End and X-Final trailer. Request body and authorization
+  forwarding were checked by hashes, not retained contents. Seven-byte writes
+  fragmented JSON/SSE; SSE included CRLF/comments and native final JSON had no LF.
+- Fourteen streams reached the client while the mock's completion gate was still
+  closed. A ten-second read/deadlock deadline bounds failure, not a 100ms target.
+  Observed local-mock first-content times were 0.833-1.380ms; this is not a latency
+  SLA or real-model first-token benchmark.
+- 24 duration observations, 18 successful inference completions, 24 terminal
+  extraction observations and zero in-flight at the final barrier. Each request
+  checked its deltas exactly once; cancellation/disconnect/error cases completed
+  duration accounting without fabricated inference completion/token observations.
+- Native fixture: 100 / 4 seconds = 25 decode tokens/sec and 16 / 0.125 seconds =
+  128 prefill tokens/sec. Compatibility responses did not add native durations;
+  reported 16/100 usage created the separate count histograms. Eight missing-usage
+  cases produced usage_absent and no token observations. Endpoint/model/family/
+  quant labels were checked against the synthetic fixture values.
+- Client transport shutdown caused mock request-context cancellation. Upstream
+  ErrAbortHandler disconnects remained incomplete/broken client streams; error
+  status/body forwarding remained faithful. All mock requests reached completion
+  before the shutdown phase; no test request remained hung.
+- Idle SIGTERM shutdown exited 0 in 0.136 seconds, without forced kill or OOM.
+  Both exporter ports were confirmed closed afterward. Active-stream SIGTERM
+  draining was not separately tested; cancellation/disconnect cleanup was.
+- Fresh prompt/response/secret markers were generated only in memory. Logs and
+  scraped metrics were scanned for those literal markers BEFORE retention. No
+  marker appeared in logs or metric labels. Only body hashes/counts/deltas were
+  retained. This is a focused synthetic leak check, not a general log-content audit.
+
+Isolation and cleanup
+Each attempt used uniquely named rootless containers and --internal networks.
+Host publications (including mock control) were ephemeral and bound to 127.0.0.1;
+backend inference used mock-ollama over the private network. Only generated config
+was mounted read-only. No host networking, privileged flag, Docker socket or
+production mount was used. All attempt containers/networks/mock image names were
+verified absent, including failed attempts. The two local release-test image names
+were matched to recorded IDs before targeted removal, then verified absent.
+No broad prune was run. Public base-image/build-layer caches and /tmp evidence
+payloads remain; they are not running containers or deployed services.
+
+Failures retained, not hidden
+The original prepared recipe generated an invalid uppercase local repository name
+from mktemp; stderr/command/status 125 are retained in initial-build-failure/. The
+smallest correction lowercased only the temporary identifier in a new local recipe.
+An initial Python helper shadowed the http module; two subsequent readiness attempts
+waited for an intentionally one-hour poll and expired before any inference cases.
+The corrected fixture uses a one-second polling interval. Host proxy injection was
+also disabled as test isolation. Those zero-case failure reports and successful
+cleanup logs remain under smoke-01/02/03. smoke-04 passed 24 cases; smoke-final
+repeated the matrix after adding extraction/capability/absence assertions. These
+were test-harness issues; the exporter and release packaging were unchanged.
+
+Remaining limitations
+Runtime coverage is amd64 and MOCK-ONLY. Existing Ollama 0.40.3 / gemma3:4b live
+checks in earlier reports used host exporter binaries and are separate evidence.
+This private-network run did not probe container-to-host Ollama reachability or
+repeat live inference. No Ollama binding/network settings were changed, no service
+was started/restarted and no model was downloaded. Live thinking-model/Open WebUI
+behavior remains untested. This smoke suite does not replace the retained parser
+memory/race/large-event tests or imply prevention of every regression. GoReleaser
+itself, CI publishing, registry upload, signatures and multiarch manifest publishing
+were not executed; local images reproduced the configured release Dockerfile,
+static binaries, platform and label flags without publishing.

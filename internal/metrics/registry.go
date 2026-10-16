@@ -19,20 +19,32 @@ type Metrics struct {
 	ModelLoadDurationSeconds *prometheus.HistogramVec
 
 	// Per-request inference (proxy mode)
-	RequestDuration      *prometheus.HistogramVec
-	LoadDuration         *prometheus.HistogramVec
-	PromptEvalDuration   *prometheus.HistogramVec
-	EvalDuration         *prometheus.HistogramVec
-	TokensPerSecond      *prometheus.GaugeVec
-	PromptTokensPerSec   *prometheus.GaugeVec
-	RequestsInFlight     *prometheus.GaugeVec
-	RequestsTotal        *prometheus.CounterVec
-	KVCachePressureRatio *prometheus.GaugeVec
+	ExtractionResults         *prometheus.CounterVec
+	ExtractionFieldSkips      *prometheus.CounterVec
+	CompatibilityInputTokens  *prometheus.HistogramVec
+	CompatibilityOutputTokens *prometheus.HistogramVec
+	RequestDuration           *prometheus.HistogramVec
+	LoadDuration              *prometheus.HistogramVec
+	PromptEvalDuration        *prometheus.HistogramVec
+	EvalDuration              *prometheus.HistogramVec
+	TokensPerSecond           *prometheus.GaugeVec
+	PromptTokensPerSec        *prometheus.GaugeVec
+	RequestsInFlight          *prometheus.GaugeVec
+	RequestsTotal             *prometheus.CounterVec
+	KVCachePressureRatio      *prometheus.GaugeVec
 }
 
 // New constructs and registers all metrics with the given registry.
 func New(reg prometheus.Registerer) *Metrics {
 	m := &Metrics{
+		ExtractionResults:    prometheus.NewCounterVec(prometheus.CounterOpts{Namespace: "ollama", Name: "proxy_extraction_total", Help: "One terminal extraction result per eligible inference response; labels use fixed vocabularies."}, []string{"outcome", "reason"}),
+		ExtractionFieldSkips: prometheus.NewCounterVec(prometheus.CounterOpts{Namespace: "ollama", Name: "proxy_extraction_field_skips_total", Help: "Responses containing ignored field names beyond the encoded length limit; once per response."}, []string{"reason"}),
+		CompatibilityInputTokens: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: "ollama", Name: "compatibility_input_tokens", Help: "Reported input tokens per completed compatibility request; absent usage is not observed.", Buckets: prometheus.ExponentialBuckets(1, 4, 9),
+		}, []string{"model", "family", "quant", "endpoint"}),
+		CompatibilityOutputTokens: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: "ollama", Name: "compatibility_output_tokens", Help: "Reported output tokens per completed compatibility request; absent usage is not observed.", Buckets: prometheus.ExponentialBuckets(1, 4, 9),
+		}, []string{"model", "family", "quant", "endpoint"}),
 		Up: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: "ollama",
 			Name:      "up",
@@ -131,7 +143,7 @@ func New(reg prometheus.Registerer) *Metrics {
 		RequestsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: "ollama",
 			Name:      "requests_total",
-			Help:      "Total number of requests proxied, by model and endpoint.",
+			Help:      "Completed inference requests, by model and endpoint.",
 		}, []string{"model", "family", "quant", "endpoint"}),
 
 		KVCachePressureRatio: prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -142,6 +154,8 @@ func New(reg prometheus.Registerer) *Metrics {
 	}
 
 	reg.MustRegister(
+		m.ExtractionResults, m.ExtractionFieldSkips,
+		m.CompatibilityInputTokens, m.CompatibilityOutputTokens,
 		m.Up,
 		m.ModelLoaded,
 		m.ModelVRAMBytes,

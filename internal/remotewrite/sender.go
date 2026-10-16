@@ -253,7 +253,7 @@ func (s *Sender) composeHeaders() map[string]string {
 // sendContext returns a per-attempt context bounded by Timeout (if set).
 func (s *Sender) sendContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if s.cfg.Timeout > 0 {
-		return context.WithTimeout(parent, s.cfg.Timeout)
+		return context.WithTimeout(parent, s.cfg.Timeout) //nolint:gosec // G118: processBatch owns and calls the returned cancel on every completed attempt; tested by TestSenderAttemptContextCancelled.
 	}
 	return parent, func() {}
 }

@@ -163,6 +163,9 @@ func TestProxy_TPSDerivation(t *testing.T) {
 		t.Fatalf("modifyResponse error: %v", err)
 	}
 
+	_, _ = io.Copy(io.Discard, fakeResp.Body)
+	_ = fakeResp.Body.Close()
+
 	tps := testutil.ToFloat64(m.TokensPerSecond.WithLabelValues("llama3.1:8b", "llama", "q4_k_m"))
 	if tps != 50.0 {
 		t.Errorf("tokens_per_second = %v, want 50.0", tps)

@@ -1,0 +1,124 @@
+Final security gate: docs/security-gate.txt and validation/security-gate contain
+the Go 1.26.9 validation, remaining-finding decisions and final source provenance.
+The report below is retained as the earlier Go 1.25.9 checkpoint.
+
+Live Ollama validation, 2026-10-16
+
+Result: PASS. 14 byte-fidelity/accounting cases and 5 direct-upstream streaming
+smoke cases returned HTTP 200. No production code changes were needed.
+
+Actual GET /api/version: {"version":"0.40.3"}
+Installed model used: gemma3:4b, Q4_K_M, 4.3B parameters.
+Installed model digest: a2af6cc3eb7fa8be8504abaf9b04e88f17a119ec3f04a3addf55f92841195f5a
+The service/model were already installed. Requests naturally loaded the model;
+keep-alive behavior was left at the server default. No service was started or
+restarted, no machine configuration changed, and no model downloaded. Both audit
+exporters and the audit relay bound only to unused 127.0.0.1 ports and shut down.
+No running exporter was replaced. No push, merge or deployment was performed.
+
+Validated implementation patch SHA256:
+b198d9921c988037963d291c5022c66f425f557c1e4b178a9de3f2a3c3c7ec1c
+Exact Go 1.25.9 binary SHA256:
+ae0a877692643617838590b50e865bdfa274c0de792af763d773ac330e0b5d51
+The binary matched validation/streaming-release/manifest.json before execution.
+All 49 recorded Go/module/lint-config file hashes still match that snapshot.
+The new work consists of live audit scripts, redacted results, and documentation;
+this does not reinterpret the earlier Go 1.27 results as Go 1.25 test evidence.
+
+Exact live commands and retained logs
+  python3 -u validation/live-ollama/check.py > validation/live-ollama/run.log 2>&1
+    PASS, exit 0. LIVE_AUDIT_PASS cases=14 server=0.40.3 model=gemma3:4b
+  python3 -u validation/live-ollama/direct.py > validation/live-ollama/direct-run.log 2>&1
+    PASS, exit 0. DIRECT_LIVE_PASS cases=5 temporary_exporter_exit=0
+Scripts use Python's standard library. report.json and live-01.json through
+live-14.json contain version/model metadata, request/body hashes, usage/timing
+fields, accounting deltas, headers/status, and individual assertions. The direct
+run is in direct-report.json. Exporter logs contain startup/shutdown metadata.
+No generated text or reasoning content was retained. run.log also retains one
+ConnectionResetError from the audit server while waiting for the next keep-alive
+request line. This occurred outside response forwarding; no case record reports
+a relay exception, and every status/body/accounting assertion passed. The separate
+direct-upstream run has no such relay and completed cleanly.
+
+14-case live matrix and observed server behavior
+  /api/generate: JSON and NDJSON streaming, both pass.
+  /api/chat: JSON and NDJSON streaming, both pass.
+  /v1/chat/completions: JSON; SSE option omitted, false, and true, all pass.
+  /v1/completions: JSON; SSE option omitted, false, and true, all pass.
+  /v1/messages: JSON and SSE, both pass.
+All outputs were limited to 24 generated tokens. These are real Ollama responses,
+not mock fixtures. Native terminal events reported 24 generated / 20 prompt tokens,
+with real native durations. Gauge values matched the corresponding native phase
+ratios, rather than being compared to a wall-time approximation.
+
+For BOTH OpenAI routes on this server version:
+  JSON: usage present, 20 prompt and 24 completion tokens.
+  SSE, stream_options omitted: usage absent.
+  SSE, include_usage:false: usage absent.
+  SSE, include_usage:true: final usage present, 20 prompt and 24 completion tokens;
+    [DONE] also observed.
+For /v1/messages on this version:
+  JSON: usage present, 5 input and 24 output tokens.
+  SSE: message_start initially reported input_tokens=12 and output_tokens=0.
+    message_delta later reported input_tokens=5, cache_read_input_tokens=15, and
+    output_tokens=24. message_stop was observed. The exporter correctly used the
+    final input value (5), rather than keeping the larger provisional start value.
+Both Anthropic responses reported 5 primary input + 15 cache-read tokens. OpenAI
+reported prompt_tokens=20 for the same prompt. The exporter records the API's
+primary input field only; it does NOT add separate cache-read/cache-creation fields
+or expose cache token histograms. Its primary-input histogram is therefore not a
+normalized total across APIs. This is a current metric limitation, now documented
+in the metric reference. These observations are for Ollama 0.40.3 with this model,
+not assumptions about every server version or independent tokenizer certification.
+
+Accounting/fidelity evidence
+For every case, request body SHA256 at the relay matched the client request body,
+including the usage options; the exporter did not inject options. Response entity
+body SHA256/length at the real Ollama connection matched what the client received.
+Status and observed non-framing end-to-end headers matched. The observer relay
+re-chunks HTTP transfer framing, so it deliberately excludes Content-Length,
+Transfer-Encoding and Connection from header comparison. No trailers were
+advertised by the live server; trailer forwarding remains covered by HTTP fixtures.
+This is body-byte fidelity, not a claim about identical TCP/chunk boundaries.
+
+Each completed request produced exactly one requests_total increment, exactly one
+request-duration observation, and returned in-flight to zero. Every native case
+produced one native eval and prompt-duration observation. Compatibility requests
+produced no native eval/prompt/load histogram deltas and left native TPS unchanged.
+Each of the four usage-absent streams produced skipped/usage_absent exactly once,
+counted the completion, and added NO token histogram observations (not zeros).
+The six compatibility responses with usage each observed input/output counts once.
+
+First-content delivery evidence
+All 9 streaming cases in the 14-case matrix passed a synchronized live-body gate:
+the observer relay paused after sending the first content-bearing portion of an
+actual Ollama stream, and the client received first content before acknowledging
+and releasing the relay. The exporter therefore forwarded content while relay EOF
+was blocked. The relay can change buffering and adds audit overhead, so these
+measurements are not an estimate of pure proxy overhead or backend token latency.
+
+The separate 5-case run configured the exporter DIRECTLY against :11434, with no
+relay, gate or simulated upstream. Measured first content / response completion:
+  /api/generate: 0.102 s / 1.244 s
+  /api/chat: 0.097 s / 1.236 s
+  /v1/chat/completions: 0.098 s / 1.236 s
+  /v1/completions: 0.102 s / 1.239 s
+  /v1/messages: 0.097 s / 1.237 s
+Each direct stream had a terminal event and exactly-once duration/completion
+accounting, with in-flight returning to zero. Thus the direct first-content range
+was 0.097-0.102 s, versus 1.236-1.244 s completion for these short warmed requests.
+These are observed samples, not a latency guarantee.
+
+Limits and unresolved risks
+The installed model inventory has no model advertising a thinking capability.
+Plain-content streaming was tested live; reasoning/thinking-block display was not
+validated with a live thinking model or Open WebUI. Byte-transparent early delivery
+and ignored/nested thinking-like fields remain covered by the fixture tests.
+No model was downloaded to extend this coverage.
+
+Live availability and route/usage behavior are now verified for the server above.
+The additional Go 1.25.9 standard-library security findings in
+security-assessment.txt remain unresolved and are not cleared by live inference.
+Large payloads, parser limits, error/cancellation races, trailers, and memory growth
+remain primarily fixture/benchmark evidence rather than claims about this short
+live run. Nothing here asserts that all regressions are prevented.
