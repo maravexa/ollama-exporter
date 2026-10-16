@@ -3,6 +3,7 @@ package remotewrite
 import (
 	"context"
 	"errors"
+	"io"
 	mathrand "math/rand"
 	"net/http"
 	"net/http/httptest"
@@ -323,5 +324,25 @@ func TestSender_429RetryAfterHonored(t *testing.T) {
 	// Should have waited at least ~1s due to Retry-After.
 	if elapsed < 800*time.Millisecond {
 		t.Errorf("elapsed = %v, want >= ~1s (Retry-After honored)", elapsed)
+	}
+}
+
+// G118 flags sendContext's returned cancel. The caller owns it; verify release
+// on success, non-retryable failure, and exhausted retry budget without waiting
+// for the one-hour deadline to expire.
+func TestSenderAttemptContextCancelled(t *testing.T) {
+	for _, status := range []int{http.StatusOK, http.StatusBadRequest, http.StatusServiceUnavailable} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			var attempt context.Context
+			client := &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+				attempt = r.Context()
+				return &http.Response{StatusCode: status, Status: http.StatusText(status), Header: make(http.Header), Body: io.NopCloser(strings.NewReader("")), Request: r}, nil
+			})}
+			s := NewSender(EndpointConfig{Name: "test", URL: "http://example.invalid/write", Timeout: time.Hour, MaxAttempts: 1}, NewQueue(1, nil), client, nil, newRecordingSenderObserver(), nil)
+			s.processBatch(context.Background(), smallBatch())
+			if attempt == nil || attempt.Err() != context.Canceled {
+				t.Fatalf("attempt context not cancelled: %v", attempt)
+			}
+		})
 	}
 }

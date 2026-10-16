@@ -6,6 +6,29 @@ Versioning follows Semantic Versioning (https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Forward native generation/chat streams incrementally, preserving unknown fields,
+  without buffering the whole response. Extract terminal metrics even when text or
+  context arrays exceed 1 MiB; malformed/truncated responses remain transparent.
+- Record request duration during reverse-proxy aborts and close upstream bodies.
+
+### Added
+- Bounded-label extraction result and field-skip counters, with exact encoded
+  scalar/key and nesting boundary tests. Invalid reported usage is distinguished
+  from missing usage and measured zero.
+- JSON/SSE inference accounting for POST `/v1/chat/completions`, `/v1/completions`,
+  and `/v1/messages`. Separate reported token-count histograms preserve native
+  timing semantics and distinguish missing usage from measured zero. Requests
+  are forwarded without injecting usage options.
+
+### Changed
+- Require Go 1.26.9 and align the container builder with that version to address
+  standard-library security findings. See docs/security-gate.txt for diagnostics
+  and the scoped assessment of remaining module-level reports.
+- Completion metrics require clean upstream EOF (and an SSE terminal marker).
+  Compatibility completions count even without usage; configured exclusions also
+  disable inference extraction. Request model inspection is bounded to 64 KiB.
+
 ## [0.4.0] - 2026-04-29
 
 ### Added

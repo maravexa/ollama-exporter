@@ -1,0 +1,147 @@
+Final security gate: docs/security-gate.txt and validation/security-gate contain
+the Go 1.26.9 validation, remaining-finding decisions and final source provenance.
+The report below is retained as the earlier Go 1.25.9 checkpoint.
+
+Live follow-up: the server is now reachable. See docs/live-validation.txt and
+validation/live-ollama for the completed 0.40.3 / gemma3:4b live checks.
+The unavailable-service section below describes the earlier checkpoint.
+
+Follow-up release validation, 2026-10-16
+
+Final source identity and retained evidence
+See validation/streaming-release/manifest.json for the exact base revision,
+SHA-256 of source.patch, file hashes, binary hash, and recorded check statuses.
+The patch includes tracked and untracked worktree changes relative to HEAD,
+excluding only validation/streaming-release itself to avoid self-reference.
+No commit, push, merge, service deployment, or project toolchain change was made.
+SHA256SUMS covers the retained logs, advisory JSON records, patch, and manifest.
+The compiled binary remains at /tmp/ollama-release-evidence/ollama-exporter;
+its Go build metadata is retained in binary-metadata.log.
+
+This is NEW evidence under Go 1.25.9 declared by go.mod, linux/amd64,
+CGO_ENABLED=1, GOFLAGS empty. Historical Go 1.27.2 tests and Go 1.25.9 lint in
+docs/streaming-validation.txt are separate evidence and are not reused as passes.
+
+Exact final commands (all prefixed with GOTOOLCHAIN=go1.25.9)
+  go test -count=1 ./...
+    PASS, exit 0, full-tests.log
+  go test -race -count=1 -coverprofile=/tmp/ollama-release-evidence/coverage.out -covermode=atomic ./...
+    PASS, exit 0, race-tests.log; no race reports
+  go vet ./...
+    PASS, exit 0, vet.log
+  go build -o /tmp/ollama-release-evidence/ollama-exporter ./cmd/exporter
+    PASS, exit 0, build.log; binary-metadata.log confirms Go 1.25.9
+  go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.0 run --timeout=5m
+    PASS, exit 0, zero issues, lint.log
+  go test ./internal/collector -count=1 -v
+    PASS, exit 0, focused-tests.log
+  go test ./internal/collector -run '^$' -bench BenchmarkBounded -benchtime=1x -benchmem
+    PASS, exit 0, memory-bench.log
+  go tool cover -func=/tmp/ollama-release-evidence/coverage.out
+    PASS, exit 0, coverage.log; overall 73.3%, collector 82.9%
+  go list -deps ./cmd/exporter
+    PASS, exit 0, dependencies.log
+  go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 -show=traces,verbose ./...
+    NOT A SECURITY PASS: tool exits 3; go run exits 1, govulncheck.log
+  go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 -json ./...
+    JSON event capture exits 0 even with findings; govulncheck-json.log
+
+Each check's independent process exit status is retained in a status JSON file;
+a later successful shell command cannot hide an earlier check failure. The
+capture.py script is retained. Formatting/whitespace results are in formatting.log.
+The pinned govulncheck supports Go 1.25.9; newer versions requiring Go >=1.26
+were not silently allowed to switch this project's analysis toolchain.
+
+Code changes in this follow-up
+internal/collector/streamjson.go records depth/selected-value failures and ignored
+oversized keys using fixed reasons. responsebody.go observes one terminal result
+per eligible response and one oversized-field-name notice per response. proxy.go
+and usage.go distinguish malformed/invalid data from absent usage and known zero.
+internal/metrics/registry.go registers two counters with bounded labels:
+  ollama_proxy_extraction_total{outcome,reason}
+  ollama_proxy_extraction_field_skips_total{reason}
+No response content, model, arbitrary path, or arbitrary field name is placed in
+these diagnostic labels or logged. Exclusions/unrelated methods/routes do not
+produce extraction results. Non-2xx inference responses report skipped/http_status.
+Invalid reported usage now rejects inference observations instead of becoming
+missing usage. Completed responses genuinely lacking usage still count as
+completed inferences and report skipped/usage_absent, without a token observation.
+
+internal/collector/extraction_test.go checks depths 63/64/65 (root included),
+selected tokens of 4095/4096/4097 encoded bytes, and field names of 127/128/129
+encoded bytes, for native JSON and SSE through real HTTP servers. String fixtures
+include escaped code points, so bytes cannot be confused with decoded characters.
+Both quotes are included in the encoded limit. Client bytes remain identical.
+Beyond the key limit, useful metrics remain and field_name_limit is observed once,
+even for repeated oversized keys across SSE events. Selected-value/depth failures
+produce no completion metrics. Explicit zero, absent/null usage, invalid counts,
+malformed/truncated JSON, early Close, repeated EOF/Close, upstream errors, HTTP
+status filtering, method/path routing, and exclusion diagnostics are tested.
+
+The full suite also retains native and compatibility HTTP fixture coverage from
+the initial implementation: prompt delivery, response fidelity, labels/trailers,
+large objects, concurrent streams, aborts, cancellation, and body closure. The
+first-token tests on all five supported routes read a flushed event while upstream
+completion is blocked on a channel. These are mock HTTP tests, not live inference.
+The 100-token/4-second and 16-token/0.125-second native fixtures remain 25 and
+128 tokens/sec respectively. Native phase timing is never replaced by wall time.
+
+Go 1.25.9 allocation evidence (generated inputs; one operation per size)
+  Generated text: 1 / 16 / 64 MiB => 28560 / 28560 / 28560 bytes allocated
+  Context array:  1 / 16 / 64 MiB => 16128 / 16128 / 16080 bytes allocated
+Input is generated through repeatReader/LimitReader; it is not prebuilt at payload
+size. Every benchmark operation must recover terminal fields. This measures parser
+allocations, not total process RSS, network buffers, or model/metric cardinality.
+
+G118 and vulnerability evidence
+See docs/security-assessment.txt for the full original G118 diagnostic, surrounding
+caller/helper code, cancellation ownership test and narrow suppression. The
+configured linter now passes; its rule remains enabled. The security assessment
+separately maps GO-2026-5710, GO-2026-5662, GO-2026-5381, and GO-2026-5264 to their
+components, production presence, call paths, and exposure. Complete symbol traces
+and official Go advisory records are retained for each. Recommendation for these
+four is documented non-applicability to the shipped executable, rather than an
+unrelated protobuf dependency upgrade or blanket vulnerability suppression.
+
+UNRESOLVED: Go 1.25.9's scan reports 20 additional standard-library symbol-level
+findings beyond those four, plus package/module findings. They need component and
+configuration triage or a tested update to a patched supported Go toolchain. These
+findings are not all presumed exploitable, and this report does not clear release
+security. Project dependencies and go.mod remain unchanged.
+
+Live Ollama: still unavailable
+live-status.json records the fresh version/tags probes: both connections to
+http://127.0.0.1:11434 are refused. Installed CLI is 0.40.3; no server version or
+model inventory can be inferred from it. No service was started or restarted and
+no model was downloaded. An asynchronous request asked for an alternative existing
+server URL and already-installed model; no new URL was available when writing this
+report. Actual installed-server usage behavior is unverified.
+
+Needed to complete live validation
+1. A reachable EXISTING Ollama URL and an already-installed model name; read access
+   to /api/version and /api/tags. If authentication is required, provide an approved
+   credential mechanism without putting secrets in logs or command-line arguments.
+   Starting a service or downloading a model requires separate approval.
+2. Build the exporter with the declared Go toolchain, create a temporary config
+   pointed at that URL, disable GPU and remote write for this run, and bind both
+   proxy and metrics only to unused 127.0.0.1 ports. Do not replace the running
+   exporter. Terminate only the temporary exporter when finished.
+3. Read and retain the ACTUAL /api/version response and installed model identity.
+   Run /api/generate and /api/chat with stream true/false and a bounded output
+   request. Check incremental thinking/content delivery and terminal native timing.
+4. Run /v1/chat/completions and /v1/completions as JSON and SSE, each with and
+   without stream_options.include_usage where accepted. Inspect whether usage is
+   present, absent or rejected separately for each route/version; do not assume
+   options work identically. Requests must not be modified by the proxy.
+5. Run /v1/messages as JSON/SSE if supported by that server; record unsupported
+   statuses explicitly. Verify message_start/message_delta usage and message_stop.
+6. Compare direct/proxied status, headers/trailers, and body hashes; compare terminal
+   token/timing fields and counter/histogram deltas. Missing usage must increment
+   skipped/usage_absent, not a zero-token observation. Native duration/TPS metrics
+   must not change for compatibility traffic. Retain first-event and completion
+   times, server/model metadata, statuses, hashes and usage counts without logging
+   generated response contents. Use deterministic fixtures to measure byte fidelity;
+   independent live generations need not produce identical output bytes.
+
+Remaining operational/parser limits are documented in README.md and docs/metrics.md.
+The tests and finite benchmarks do not prove all possible regressions are prevented.

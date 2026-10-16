@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/maravexa/ollama-exporter/internal/config"
@@ -48,8 +49,7 @@ func (p *Proxy) Start(ctx context.Context) error {
 		return err
 	}
 
-	rp := httputil.NewSingleHostReverseProxy(target)
-	rp.ModifyResponse = p.modifyResponse
+	rp := p.reverseProxy(target)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", p.instrumentedHandler(rp))
@@ -76,8 +76,16 @@ func (p *Proxy) Start(ctx context.Context) error {
 	return nil
 }
 
+// reverseProxy centralizes production response copying and flushing settings.
+func (p *Proxy) reverseProxy(target *url.URL) *httputil.ReverseProxy {
+	rp := httputil.NewSingleHostReverseProxy(target)
+	rp.ModifyResponse = p.modifyResponse
+	rp.FlushInterval = -1
+	return rp
+}
+
 // instrumentedHandler wraps the reverse proxy to track in-flight requests
-// and end-to-end latency before the response body is inspected.
+// and handling latency around response forwarding.
 // Requests whose path appears in p.excludePaths are proxied normally but
 // generate no Prometheus observations, preventing internal polling calls
 // from polluting inference histograms.
@@ -85,21 +93,26 @@ func (p *Proxy) instrumentedHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		model := r.URL.Query().Get("model")
 		endpoint := r.URL.Path
+		start := time.Now()
+		var requestReadErr error
 
 		if r.Method == http.MethodPost &&
-			(endpoint == "/api/generate" || endpoint == "/api/chat") &&
+			inferencePath(endpoint) &&
 			r.Body != nil {
-			bodyBytes, err := io.ReadAll(r.Body)
+			bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, 64<<10))
 			if err != nil {
 				slog.Debug("proxy: failed to read request body", "err", err)
+				_ = r.Body.Close()
+				requestReadErr = err
 			}
-			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-			r.ContentLength = int64(len(bodyBytes))
+			r.Body = &prefixBody{Reader: io.MultiReader(bytes.NewReader(bodyBytes), r.Body), source: r.Body}
 			if len(bodyBytes) > 0 {
 				var req struct {
 					Model string `json:"model"`
 				}
-				if json.Unmarshal(bodyBytes, &req) == nil && req.Model != "" {
+				fields := jsonFields{}
+				fields.feed(bodyBytes)
+				if json.Unmarshal(fields.fields["model"], &req.Model) == nil && req.Model != "" {
 					model = req.Model
 				}
 			}
@@ -107,6 +120,10 @@ func (p *Proxy) instrumentedHandler(next http.Handler) http.Handler {
 
 		_, excluded := p.excludePaths[endpoint]
 		if excluded {
+			if requestReadErr != nil {
+				http.Error(w, "failed to read request body", http.StatusBadRequest)
+				return
+			}
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -114,49 +131,79 @@ func (p *Proxy) instrumentedHandler(next http.Handler) http.Handler {
 		p.metrics.RequestsInFlight.WithLabelValues(model, endpoint).Inc()
 		defer p.metrics.RequestsInFlight.WithLabelValues(model, endpoint).Dec()
 
-		start := time.Now()
+		defer func() {
+			elapsed := time.Since(start).Seconds()
+			info := p.mc.Get(context.Background(), model)
+			p.metrics.RequestDuration.WithLabelValues(model, info.Family, info.Quant, endpoint).Observe(elapsed)
+		}()
+		if requestReadErr != nil {
+			http.Error(w, "failed to read request body", http.StatusBadRequest)
+			return
+		}
+		r = r.WithContext(context.WithValue(r.Context(), requestModelKey{}, model))
 		next.ServeHTTP(w, r)
-
-		info := p.mc.Get(context.Background(), model)
-		p.metrics.RequestDuration.
-			WithLabelValues(model, info.Family, info.Quant, endpoint).
-			Observe(time.Since(start).Seconds())
 	})
 }
 
-// modifyResponse intercepts the upstream response, reads Ollama's timing
-// fields from the JSON body, records histogram observations, then restores
-// the body so the downstream client receives an unmodified response.
+type prefixBody struct {
+	io.Reader
+	source io.Closer
+}
+
+func (b *prefixBody) Close() error { return b.source.Close() }
+
+type requestModelKey struct{}
+
+func inferencePath(path string) bool {
+	switch path {
+	case "/api/generate", "/api/chat", "/v1/chat/completions", "/v1/completions", "/v1/messages":
+		return true
+	}
+	return false
+}
+
+// modifyResponse installs a byte-transparent observer without changing framing.
 func (p *Proxy) modifyResponse(resp *http.Response) error {
-	if resp.Request.Method != http.MethodPost {
-		return nil
-	}
 	path := resp.Request.URL.Path
-	if path != "/api/generate" && path != "/api/chat" {
+	if resp.Request.Method != http.MethodPost || !inferencePath(path) {
 		return nil
 	}
-
-	body, err := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return err
-	}
-
-	// Always restore body and fix framing headers so the downstream client
-	// receives correct Content-Length regardless of whether the upstream used
-	// chunked transfer encoding or a fixed content-length.
-	resp.Body = io.NopCloser(bytes.NewReader(body))
-	resp.ContentLength = int64(len(body))
-	resp.TransferEncoding = nil // clear chunked encoding if set
-
-	var gen ollama.GenerateResponse
-	if err := json.Unmarshal(body, &gen); err != nil {
-		return nil //nolint:nilerr // intentional: non-generate/streaming responses must not fail the proxy
-	}
-	if !gen.Done {
+	if _, excluded := p.excludePaths[path]; excluded {
 		return nil
 	}
+	report := func(outcome, reason string) { p.metrics.ExtractionResults.WithLabelValues(outcome, reason).Inc() }
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		report("skipped", "http_status")
+		return nil
+	}
+	compatibility := strings.HasPrefix(path, "/v1/")
+	var body *responseBody
+	body = newResponseBody(resp.Body, compatibility && strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream"), func(f map[string]json.RawMessage) {
+		if compatibility {
+			outcome, reason := p.recordUsage(resp.Request, path, f)
+			body.report(outcome, reason)
+			return
+		}
+		var gen ollama.GenerateResponse
+		data, err := json.Marshal(f)
+		if err != nil || json.Unmarshal(data, &gen) != nil {
+			body.report("failed", "invalid_fields")
+			return
+		}
+		if !gen.Done {
+			body.report("skipped", "incomplete")
+			return
+		}
+		p.recordGenerateMetrics(gen, path)
+		body.report("success", "none")
+	})
+	body.result = report
+	body.notice = func() { p.metrics.ExtractionFieldSkips.WithLabelValues("field_name_limit").Inc() }
+	resp.Body = body
+	return nil
+}
 
+func (p *Proxy) recordGenerateMetrics(gen ollama.GenerateResponse, path string) {
 	info := p.mc.Get(context.Background(), gen.Model)
 	labels := make([]string, 0, 4)
 	labels = append(labels, gen.Model, info.Family, info.Quant)
@@ -190,6 +237,4 @@ func (p *Proxy) modifyResponse(resp *http.Response) error {
 	}
 
 	p.metrics.RequestsTotal.WithLabelValues(append(labels, path)...).Inc()
-
-	return nil
 }
