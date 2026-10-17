@@ -75,8 +75,12 @@ func waitFinished(t *testing.T, reg *prometheus.Registry, count uint64) {
 }
 func post(t *testing.T, srv *httptest.Server, path string) *http.Response {
 	t.Helper()
+	return postWithTimeout(t, srv, path, 10*time.Second)
+}
+func postWithTimeout(t *testing.T, srv *httptest.Server, path string, timeout time.Duration) *http.Response {
+	t.Helper()
 	client := srv.Client()
-	client.Timeout = 10 * time.Second
+	client.Timeout = timeout
 	resp, err := client.Post(srv.URL+path, "application/json", strings.NewReader(`{"model":"fixture"}`))
 	if err != nil {
 		t.Fatal(err)
@@ -199,9 +203,34 @@ func TestLargeNativeObjects(t *testing.T) {
 					if stream {
 						body = `{"done":false,"response":"first"}` + "\n" + body
 					}
-					srv, _, reg := serveProxy(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, body) }))
-					resp := post(t, srv, "/api/generate")
+					type writeResult struct {
+						n          int
+						err        error
+						contextErr error
+					}
+					writes := make(chan writeResult, 1)
+					var received int
+					var readErr error
+					// Register before serveProxy so reporting runs after server cleanup
+					// has joined the handler. The buffered channel never blocks its return.
+					t.Cleanup(func() {
+						select {
+						case result := <-writes:
+							t.Logf("large body diagnostics: expected=%d received=%d read_error=%v upstream_written=%d upstream_write_error=%v upstream_context_error_at_write_return=%v",
+								len(body), received, readErr, result.n, result.err, result.contextErr)
+						default:
+							t.Logf("large body diagnostics: expected=%d received=%d read_error=%v upstream_write_result=unavailable",
+								len(body), received, readErr)
+						}
+					})
+					srv, _, reg := serveProxy(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						n, err := io.WriteString(w, body)
+						writes <- writeResult{n: n, err: err, contextErr: r.Context().Err()}
+					}))
+					// Large arrays need more time under race and atomic coverage instrumentation.
+					resp := postWithTimeout(t, srv, "/api/generate", 60*time.Second)
 					got, err := io.ReadAll(resp.Body)
+					received, readErr = len(got), err
 					resp.Body.Close()
 					if err != nil || string(got) != body {
 						t.Fatal("large body fidelity", err)
