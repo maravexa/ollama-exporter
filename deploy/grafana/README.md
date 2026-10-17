@@ -66,3 +66,32 @@ Row 4 — Model Lifecycle
   Load/unload events
   Requests in flight
   Request rate (req/s)
+
+## Overview labels and current values
+
+Overview stat tiles show a concise series name alongside each value: the exporter
+instance, plus model and quantization where applicable. Request totals also name
+the endpoint. This keeps multiple models/exporters distinguishable without
+Grafana falling back to a long Prometheus label set above each value (issue #21).
+
+The overview uses instant queries evaluated at the selected time range's end.
+This avoids retaining removed model gauges through `lastNotNull` over historical
+samples. Time-series panels still show history. Total Requests remains a 24-hour
+increase per model/endpoint, not a lifetime count or a count for the dashboard's
+entire selected range; retained counter history can still include removed models.
+
+For an existing dashboard imported from Grafana.com, import this repository's
+updated `dashboard.json` and replace the dashboard with the same UID after
+reviewing any local customizations. Updating the exporter alone does not update
+an imported dashboard, and the Grafana.com listing needs a separate publication.
+
+Configuration regression check (from the repository root):
+
+    go test ./deploy/grafana
+
+Before publishing, import into a real Grafana instance with one and multiple
+models/exporters. Verify the overview names and numeric values remain readable,
+status mappings still show UP/DOWN and IN VRAM/UNLOADED, and removed gauge series
+vanish after Prometheus ingests their disappearance. Check the historical charts
+and 24-hour request totals independently. The configuration test does not validate
+Grafana rendering or a deployed Grafana.com revision.
