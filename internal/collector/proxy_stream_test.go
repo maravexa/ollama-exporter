@@ -75,8 +75,12 @@ func waitFinished(t *testing.T, reg *prometheus.Registry, count uint64) {
 }
 func post(t *testing.T, srv *httptest.Server, path string) *http.Response {
 	t.Helper()
+	return postWithTimeout(t, srv, path, 10*time.Second)
+}
+func postWithTimeout(t *testing.T, srv *httptest.Server, path string, timeout time.Duration) *http.Response {
+	t.Helper()
 	client := srv.Client()
-	client.Timeout = 10 * time.Second
+	client.Timeout = timeout
 	resp, err := client.Post(srv.URL+path, "application/json", strings.NewReader(`{"model":"fixture"}`))
 	if err != nil {
 		t.Fatal(err)
@@ -200,7 +204,8 @@ func TestLargeNativeObjects(t *testing.T) {
 						body = `{"done":false,"response":"first"}` + "\n" + body
 					}
 					srv, _, reg := serveProxy(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, body) }))
-					resp := post(t, srv, "/api/generate")
+					// Large arrays need more time under race and atomic coverage instrumentation.
+					resp := postWithTimeout(t, srv, "/api/generate", 60*time.Second)
 					got, err := io.ReadAll(resp.Body)
 					resp.Body.Close()
 					if err != nil || string(got) != body {
