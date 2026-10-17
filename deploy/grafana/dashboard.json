@@ -95,7 +95,7 @@
           ]
         },
         "orientation": "auto",
-        "textMode": "auto",
+        "textMode": "value_and_name",
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "auto"
@@ -147,8 +147,10 @@
         {
           "datasource": "${datasource}",
           "expr": "ollama_up",
-          "legendFormat": "",
-          "refId": "A"
+          "legendFormat": "{{instance}}",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ]
     },
@@ -170,7 +172,7 @@
           ]
         },
         "orientation": "auto",
-        "textMode": "auto",
+        "textMode": "value_and_name",
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "auto"
@@ -222,8 +224,10 @@
         {
           "datasource": "${datasource}",
           "expr": "ollama_model_loaded{job=\"ollama\"}",
-          "legendFormat": "",
-          "refId": "A"
+          "legendFormat": "{{model}} {{quant}} @ {{instance}}",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ]
     },
@@ -245,7 +249,7 @@
           ]
         },
         "orientation": "auto",
-        "textMode": "auto",
+        "textMode": "value_and_name",
         "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "auto"
@@ -272,8 +276,10 @@
         {
           "datasource": "${datasource}",
           "expr": "ollama_model_vram_bytes{job=\"ollama\"}",
-          "legendFormat": "",
-          "refId": "A"
+          "legendFormat": "{{model}} {{quant}} @ {{instance}}",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ]
     },
@@ -295,7 +301,7 @@
           ]
         },
         "orientation": "auto",
-        "textMode": "auto",
+        "textMode": "value_and_name",
         "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "auto"
@@ -322,8 +328,10 @@
         {
           "datasource": "${datasource}",
           "expr": "ollama_tokens_per_second{job=\"ollama\"}",
-          "legendFormat": "",
-          "refId": "A"
+          "legendFormat": "{{model}} {{quant}} @ {{instance}}",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ]
     },
@@ -345,7 +353,7 @@
           ]
         },
         "orientation": "auto",
-        "textMode": "auto",
+        "textMode": "value_and_name",
         "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "auto"
@@ -372,8 +380,10 @@
         {
           "datasource": "${datasource}",
           "expr": "ollama_prompt_tokens_per_second{job=\"ollama\"}",
-          "legendFormat": "",
-          "refId": "A"
+          "legendFormat": "{{model}} {{quant}} @ {{instance}}",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ]
     },
@@ -395,7 +405,7 @@
           ]
         },
         "orientation": "auto",
-        "textMode": "auto",
+        "textMode": "value_and_name",
         "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "auto"
@@ -422,8 +432,10 @@
         {
           "datasource": "${datasource}",
           "expr": "increase(ollama_requests_total{job=\"ollama\"}[24h])",
-          "legendFormat": "",
-          "refId": "A"
+          "legendFormat": "{{model}} {{quant}} {{endpoint}} @ {{instance}}",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ]
     },

@@ -136,3 +136,22 @@ ignored strings/numbers/arrays have no total size limit. Exceeding a parser limi
 never changes the client response. These counters do not log response contents.
 Invalid reported compatibility counts now reject completion/token observations
 rather than silently treating invalid values as absent usage.
+
+### Deleted models
+
+On each successful `/api/ps` and `/api/tags` inventory poll, models absent from
+both snapshots lose their cached metadata and current-state series:
+`ollama_model_loaded`, `ollama_model_vram_bytes`, `ollama_tokens_per_second`,
+`ollama_prompt_tokens_per_second`, and `ollama_kv_cache_pressure_ratio`.
+An installed but unloaded model retains its zero loaded/VRAM gauges. A model
+still running remains visible even if the tag snapshot does not list it.
+Failed or missing inventory data never triggers removal. Explicit empty model
+arrays are valid empty inventories. A concurrent inference completion can briefly
+reintroduce a gauge; the next successful inventory poll removes it again.
+
+Cumulative counters, histograms, and request-in-flight bookkeeping are preserved:
+model deletion does not erase request history or reset totals. These series can
+still name deleted models, and Prometheus retains previously scraped history.
+To display current model state, use instant queries rather than reducing a
+historical range with `lastNotNull`. Metadata for a deleted and later recreated
+model is fetched again on its next use.

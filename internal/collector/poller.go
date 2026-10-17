@@ -6,6 +6,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
+
 	"github.com/maravexa/ollama-exporter/internal/config"
 	"github.com/maravexa/ollama-exporter/internal/metrics"
 	"github.com/maravexa/ollama-exporter/internal/ollama"
@@ -103,6 +106,56 @@ func (p *Poller) scrape(ctx context.Context) {
 		}
 	}
 
+	// Reconcile only successful inventory snapshots. A running model remains
+	// valid even if /api/tags and /api/ps race with a pull or deletion.
+	tags, err := p.client.Tags(ctx)
+	if err != nil {
+		slog.Warn("failed to scrape /api/tags; retaining model inventory", "err", err)
+	} else if tags.Models != nil && ps.Models != nil {
+		present := make(map[string]bool, len(tags.Models)+len(currentLoaded))
+		for _, model := range tags.Models {
+			present[model.Name] = true
+		}
+		for name := range currentLoaded {
+			present[name] = true
+		}
+		p.mc.prune(present)
+		for _, gauge := range []*prometheus.GaugeVec{
+			p.metrics.ModelLoaded, p.metrics.ModelVRAMBytes,
+			p.metrics.TokensPerSecond, p.metrics.PromptTokensPerSec,
+			p.metrics.KVCachePressureRatio,
+		} {
+			pruneModelGauge(gauge, present)
+		}
+	}
+
 	p.prevLoaded = currentLoaded
 	p.initialized = true
+}
+
+// pruneModelGauge also finds samples from requests completing concurrently with
+// an earlier reconciliation, even if their metadata has already been evicted.
+// Such late observations are removed on the next successful inventory poll.
+func pruneModelGauge(gauge *prometheus.GaugeVec, present map[string]bool) {
+	ch := make(chan prometheus.Metric)
+	go func() {
+		gauge.Collect(ch)
+		close(ch)
+	}()
+	absent := make(map[string]bool)
+	for metric := range ch {
+		var sample dto.Metric
+		if err := metric.Write(&sample); err != nil {
+			continue
+		}
+		for _, label := range sample.Label {
+			if label.GetName() == "model" && !present[label.GetValue()] {
+				absent[label.GetValue()] = true
+			}
+		}
+	}
+	// Delete after collection completes: Collect holds the vector's read lock.
+	for name := range absent {
+		gauge.DeletePartialMatch(prometheus.Labels{"model": name})
+	}
 }

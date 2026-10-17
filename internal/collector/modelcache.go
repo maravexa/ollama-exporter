@@ -14,7 +14,7 @@ type ModelInfo struct {
 	Quant  string
 }
 
-// ModelCache is a thread-safe, write-once cache of ModelInfo keyed by model name.
+// ModelCache is a thread-safe cache of ModelInfo keyed by model name.
 // It calls /api/show on the first access for each unique model name.
 type ModelCache struct {
 	mu     sync.RWMutex
@@ -108,4 +108,17 @@ func parseModelName(name string) (family, quant string) {
 	}
 
 	return family, quant
+}
+
+// prune evicts metadata absent from a successfully fetched inventory. Holding
+// the same lock as fetchAndCache prevents an older in-progress lookup from
+// restoring an entry after pruning.
+func (mc *ModelCache) prune(present map[string]bool) {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	for name := range mc.cache {
+		if !present[name] {
+			delete(mc.cache, name)
+		}
+	}
 }
