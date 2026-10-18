@@ -154,3 +154,44 @@ func TestDashboardImportStructureAndOverviewQueries(t *testing.T) {
 		t.Errorf("expected 14 panels, got %d", len(dashboard.Panels))
 	}
 }
+
+func TestOverviewLayoutPreservesReadableLabels(t *testing.T) {
+	data, err := os.ReadFile("dashboard.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dashboard struct {
+		Panels []struct {
+			ID      int                      `json:"id"`
+			Type    string                   `json:"type"`
+			Grid    struct{ X, Y, W, H int } `json:"gridPos"`
+			Options struct {
+				Text struct{ TitleSize, ValueSize int } `json:"text"`
+			} `json:"options"`
+		} `json:"panels"`
+	}
+	if err := json.Unmarshal(data, &dashboard); err != nil {
+		t.Fatal(err)
+	}
+	for i, p := range dashboard.Panels {
+		a := p.Grid
+		if a.X < 0 || a.Y < 0 || a.W <= 0 || a.H <= 0 || a.X+a.W > 24 {
+			t.Errorf("panel %d has invalid grid bounds", p.ID)
+		}
+		if p.Type == "stat" {
+			// Three model series must have room for identity labels as well as values.
+			if a.W < 8 || a.H < 4 {
+				t.Errorf("overview panel %d is too narrow/short for multiple named series", p.ID)
+			}
+			if p.Options.Text.TitleSize < 12 || p.Options.Text.ValueSize < 24 {
+				t.Errorf("overview panel %d needs explicit readable label/value sizes", p.ID)
+			}
+		}
+		for _, q := range dashboard.Panels[i+1:] {
+			b := q.Grid
+			if a.X < b.X+b.W && b.X < a.X+a.W && a.Y < b.Y+b.H && b.Y < a.Y+a.H {
+				t.Errorf("panels %d and %d overlap", p.ID, q.ID)
+			}
+		}
+	}
+}
