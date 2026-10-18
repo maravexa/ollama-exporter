@@ -99,13 +99,14 @@ func (p *Proxy) instrumentedHandler(next http.Handler) http.Handler {
 		if r.Method == http.MethodPost &&
 			inferencePath(endpoint) &&
 			r.Body != nil {
-			bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, 64<<10))
+			body := &eofReader{Reader: r.Body}
+			bodyBytes, err := io.ReadAll(io.LimitReader(body, 64<<10))
 			if err != nil {
 				slog.Debug("proxy: failed to read request body", "err", err)
 				_ = r.Body.Close()
 				requestReadErr = err
 			}
-			r.Body = &prefixBody{Reader: io.MultiReader(bytes.NewReader(bodyBytes), r.Body), source: r.Body}
+			r.Body = &prefixBody{Reader: io.MultiReader(bytes.NewReader(bodyBytes), body), source: r.Body}
 			if len(bodyBytes) > 0 {
 				var req struct {
 					Model string `json:"model"`
@@ -143,6 +144,23 @@ func (p *Proxy) instrumentedHandler(next http.Handler) http.Handler {
 		r = r.WithContext(context.WithValue(r.Context(), requestModelKey{}, model))
 		next.ServeHTTP(w, r)
 	})
+}
+
+// eofReader avoids rereading an exhausted inbound body after net/http has
+// closed it while flushing a response. The transport may check for excess
+// request bytes after it has already received the upstream response.
+type eofReader struct {
+	io.Reader
+	eof bool
+}
+
+func (r *eofReader) Read(p []byte) (int, error) {
+	if r.eof {
+		return 0, io.EOF
+	}
+	n, err := r.Reader.Read(p)
+	r.eof = err == io.EOF
+	return n, err
 }
 
 type prefixBody struct {
