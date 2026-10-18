@@ -85,8 +85,8 @@
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 4,
-        "h": 3
+        "w": 8,
+        "h": 4
       },
       "options": {
         "reduceOptions": {
@@ -98,7 +98,11 @@
         "textMode": "value_and_name",
         "colorMode": "background",
         "graphMode": "none",
-        "justifyMode": "auto"
+        "justifyMode": "auto",
+        "text": {
+          "titleSize": 12,
+          "valueSize": 24
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -160,10 +164,10 @@
       "type": "stat",
       "datasource": "${datasource}",
       "gridPos": {
-        "x": 4,
+        "x": 8,
         "y": 0,
-        "w": 4,
-        "h": 3
+        "w": 8,
+        "h": 4
       },
       "options": {
         "reduceOptions": {
@@ -175,7 +179,11 @@
         "textMode": "value_and_name",
         "colorMode": "background",
         "graphMode": "none",
-        "justifyMode": "auto"
+        "justifyMode": "auto",
+        "text": {
+          "titleSize": 12,
+          "valueSize": 24
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -237,10 +245,10 @@
       "type": "stat",
       "datasource": "${datasource}",
       "gridPos": {
-        "x": 8,
+        "x": 16,
         "y": 0,
-        "w": 4,
-        "h": 3
+        "w": 8,
+        "h": 4
       },
       "options": {
         "reduceOptions": {
@@ -252,7 +260,11 @@
         "textMode": "value_and_name",
         "colorMode": "value",
         "graphMode": "none",
-        "justifyMode": "auto"
+        "justifyMode": "auto",
+        "text": {
+          "titleSize": 12,
+          "valueSize": 24
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -289,10 +301,10 @@
       "type": "stat",
       "datasource": "${datasource}",
       "gridPos": {
-        "x": 12,
-        "y": 0,
-        "w": 4,
-        "h": 3
+        "x": 0,
+        "y": 4,
+        "w": 8,
+        "h": 4
       },
       "options": {
         "reduceOptions": {
@@ -304,7 +316,11 @@
         "textMode": "value_and_name",
         "colorMode": "value",
         "graphMode": "none",
-        "justifyMode": "auto"
+        "justifyMode": "auto",
+        "text": {
+          "titleSize": 12,
+          "valueSize": 24
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -341,10 +357,10 @@
       "type": "stat",
       "datasource": "${datasource}",
       "gridPos": {
-        "x": 16,
-        "y": 0,
-        "w": 4,
-        "h": 3
+        "x": 8,
+        "y": 4,
+        "w": 8,
+        "h": 4
       },
       "options": {
         "reduceOptions": {
@@ -356,7 +372,11 @@
         "textMode": "value_and_name",
         "colorMode": "value",
         "graphMode": "none",
-        "justifyMode": "auto"
+        "justifyMode": "auto",
+        "text": {
+          "titleSize": 12,
+          "valueSize": 24
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -393,10 +413,10 @@
       "type": "stat",
       "datasource": "${datasource}",
       "gridPos": {
-        "x": 20,
-        "y": 0,
-        "w": 4,
-        "h": 3
+        "x": 16,
+        "y": 4,
+        "w": 8,
+        "h": 4
       },
       "options": {
         "reduceOptions": {
@@ -408,7 +428,11 @@
         "textMode": "value_and_name",
         "colorMode": "value",
         "graphMode": "none",
-        "justifyMode": "auto"
+        "justifyMode": "auto",
+        "text": {
+          "titleSize": 12,
+          "valueSize": 24
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -446,7 +470,7 @@
       "datasource": "${datasource}",
       "gridPos": {
         "x": 0,
-        "y": 3,
+        "y": 8,
         "w": 12,
         "h": 8
       },
@@ -493,7 +517,7 @@
       "datasource": "${datasource}",
       "gridPos": {
         "x": 12,
-        "y": 3,
+        "y": 8,
         "w": 12,
         "h": 8
       },
@@ -545,7 +569,7 @@
       "datasource": "${datasource}",
       "gridPos": {
         "x": 0,
-        "y": 11,
+        "y": 16,
         "w": 8,
         "h": 8
       },
@@ -585,7 +609,7 @@
       "datasource": "${datasource}",
       "gridPos": {
         "x": 8,
-        "y": 11,
+        "y": 16,
         "w": 8,
         "h": 8
       },
@@ -626,7 +650,7 @@
       "description": "Rising values indicate degraded KV cache efficiency. Correlates with increasing context length.",
       "gridPos": {
         "x": 16,
-        "y": 11,
+        "y": 16,
         "w": 8,
         "h": 8
       },
@@ -666,7 +690,7 @@
       "datasource": "${datasource}",
       "gridPos": {
         "x": 0,
-        "y": 19,
+        "y": 24,
         "w": 8,
         "h": 6
       },
@@ -712,7 +736,7 @@
       "datasource": "${datasource}",
       "gridPos": {
         "x": 8,
-        "y": 19,
+        "y": 24,
         "w": 8,
         "h": 6
       },
@@ -752,7 +776,7 @@
       "datasource": "${datasource}",
       "gridPos": {
         "x": 16,
-        "y": 19,
+        "y": 24,
         "w": 8,
         "h": 6
       },

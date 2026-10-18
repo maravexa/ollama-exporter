@@ -49,20 +49,20 @@ localhost with your exporter's hostname or IP in the scrape config:
 
 ## Panels
 
-Row 1 — Health and Overview
-  Ollama Status, Model Loaded, VRAM Usage, Decode TPS, Prefill TPS,
-  Total Requests (24h)
+Rows 1–2 — Health and Overview
+  Ollama Status, Model Loaded, VRAM Usage
+  Decode TPS, Prefill TPS, Total Requests (24h)
 
-Row 2 — Throughput
+Row 3 — Throughput
   Decode vs Prefill TPS over time
   Request duration percentiles (p50/p95/p99)
 
-Row 3 — Inference Phases
+Row 4 — Inference Phases
   Eval duration p95 (decode)
   Prompt eval duration p95 (prefill)
   KV cache pressure ratio
 
-Row 4 — Model Lifecycle
+Row 5 — Model Lifecycle
   Load/unload events
   Requests in flight
   Request rate (req/s)
@@ -95,3 +95,19 @@ status mappings still show UP/DOWN and IN VRAM/UNLOADED, and removed gauge serie
 vanish after Prometheus ingests their disappearance. Check the historical charts
 and 24-hour request totals independently. The configuration test does not validate
 Grafana rendering or a deployed Grafana.com revision.
+
+## Multiple-series readability
+
+The six overview tiles occupy two rows of three, with explicit 12-pixel label
+and 24-pixel value sizes. This gives model, quantization, instance, and endpoint
+names more room than the former six-column row, which could shrink names to tiny
+text even after raw-label fallback was removed.
+
+An isolated Grafana 10.4.0 / Prometheus 2.51.0 fixture with three model series
+across two exporter instances rendered readable overview labels at an 1800-pixel
+viewport. All six stat queries returned the expected series and values. This
+layout change preserves queries, units, mappings, legends, datasource selection,
+and instant-query behavior. It does not certify arbitrary model-name lengths,
+higher cardinality, or smaller viewports, and does not update Grafana.com or an
+already-imported dashboard. The fixture omitted histogram and lifecycle samples;
+its empty historical panels were not evidence of runtime coverage for those data.
