@@ -1,9 +1,10 @@
-// Package gpu implements AMD GPU hardware metrics collection via the Linux
-// sysfs interface exposed by the amdgpu kernel driver.
-//
-// No ROCm userspace packages (rocm-smi, amd-smi, etc.) are required. The
-// sysfs paths used here are stable on any Linux system running the amdgpu
-// driver (kernel 4.15+).
+//go:build linux
+
+// This file implements the Linux / AMD GPU backend via the amdgpu sysfs
+// interface exposed by the kernel driver. No ROCm userspace packages (rocm-smi,
+// amd-smi, etc.) are required; the sysfs paths used here are stable on any Linux
+// system running the amdgpu driver (kernel 4.15+). Shared types (Config, metric
+// descriptors) live in gpu.go.
 package gpu
 
 import (
@@ -18,31 +19,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 )
-
-// Config holds configuration for the AMD GPU collector.
-type Config struct {
-	// Enabled activates GPU metric collection via sysfs.
-	Enabled bool
-
-	// PollInterval controls how often GPU metrics are read from sysfs.
-	// If zero, defaults to 15 seconds.
-	PollInterval time.Duration
-
-	// SysfsBase is the root of the DRM sysfs tree.
-	// Defaults to /sys/class/drm. Override for testing.
-	SysfsBase string
-}
-
-// gpuMetrics holds all GPU Prometheus metric descriptors. It is intentionally
-// unexported — callers interact through the Collector, not the metrics directly.
-type gpuMetrics struct {
-	Utilization *prometheus.GaugeVec
-	Temperature *prometheus.GaugeVec
-	VRAMUsed    *prometheus.GaugeVec
-	VRAMTotal   *prometheus.GaugeVec
-	Power       *prometheus.GaugeVec
-	Clock       *prometheus.GaugeVec
-}
 
 // device represents a single discovered AMD GPU and its resolved sysfs paths.
 type device struct {
@@ -368,56 +344,4 @@ func readTrimmed(path string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(data)), nil
-}
-
-// newGPUMetrics constructs and registers all GPU Prometheus metrics.
-func newGPUMetrics(reg prometheus.Registerer) gpuMetrics {
-	m := gpuMetrics{
-		Utilization: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Namespace: "ollama",
-			Name:      "gpu_utilization_percent",
-			Help:      "GPU utilization as a percentage (0–100), sourced from gpu_busy_percent in sysfs.",
-		}, []string{"gpu", "name"}),
-
-		Temperature: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Namespace: "ollama",
-			Name:      "gpu_temperature_celsius",
-			Help:      "GPU temperature in degrees Celsius, sourced from hwmon temp1_input in sysfs (millidegrees / 1000).",
-		}, []string{"gpu", "name"}),
-
-		VRAMUsed: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Namespace: "ollama",
-			Name:      "gpu_vram_used_bytes",
-			Help:      "VRAM currently in use on the GPU, in bytes.",
-		}, []string{"gpu", "name"}),
-
-		VRAMTotal: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Namespace: "ollama",
-			Name:      "gpu_vram_total_bytes",
-			Help:      "Total VRAM available on the GPU, in bytes. Cached at startup.",
-		}, []string{"gpu", "name"}),
-
-		Power: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Namespace: "ollama",
-			Name:      "gpu_power_watts",
-			Help:      "GPU power draw in watts, sourced from hwmon power1_average or power1_input in sysfs (microwatts / 1 000 000).",
-		}, []string{"gpu", "name"}),
-
-		Clock: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Namespace: "ollama",
-			Name:      "gpu_clock_mhz",
-			Help:      `GPU or memory clock speed in MHz. Label "type" is "gpu" (pp_dpm_sclk) or "memory" (pp_dpm_mclk).`,
-		}, []string{"gpu", "name", "type"}),
-	}
-
-	reg.MustRegister(
-		m.Utilization,
-		m.Temperature,
-		m.VRAMUsed,
-		m.VRAMTotal,
-		m.Power,
-		m.Clock,
-	)
-
-	return m
 }

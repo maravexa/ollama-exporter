@@ -1,6 +1,6 @@
 module github.com/maravexa/ollama-exporter
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/golang/snappy v0.0.4
