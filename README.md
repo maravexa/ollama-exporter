@@ -24,7 +24,7 @@ Native `/api/generate` and `/api/chat` support NDJSON streams and single-object
 `stream:false` responses. The proxy forwards original response bytes, including
 thinking fields, and flushes each read without accumulating the response body.
 
-On Xena with Open WebUI 0.12.3, Ollama 0.34.0 and `qwen3.5:9b`, manual checks
+On a Linux test host with Open WebUI 0.12.3, Ollama 0.34.0 and `qwen3.5:9b`, manual checks
 confirmed progressive thinking through the proxy and, in a separate matched test
 with thinking disabled, progressive answers on both direct and proxied routes.
 These checks did not verify an Open WebUI thinking-to-answer transition within one
