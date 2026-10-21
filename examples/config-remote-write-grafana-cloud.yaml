@@ -40,6 +40,6 @@ remote_write:
       cooldown: 30s
 
     external_labels:
-      cluster: cyberdeck
+      cluster: example-cluster
       env: homelab
       exporter: ollama-exporter

@@ -10,7 +10,7 @@ prometheus.scrape "ollama_exporter" {
     {
       __address__ = "localhost:9400",
       job         = "ollama-exporter",
-      instance    = "cyberdeck.vexa.heim",
+      instance    = "example-host:9400",
     },
   ]
   forward_to     = [prometheus.remote_write.mimir.receiver]
@@ -19,7 +19,7 @@ prometheus.scrape "ollama_exporter" {
 
 prometheus.remote_write "mimir" {
   endpoint {
-    url = "https://mimir.internal.example.com/api/v1/push"
+    url = "https://mimir.example.com/api/v1/push"
 
     headers = {
       "X-Scope-OrgID" = "ollama-cluster",
@@ -36,7 +36,7 @@ prometheus.remote_write "mimir" {
   }
 
   external_labels = {
-    cluster  = "cyberdeck",
+    cluster  = "example-cluster",
     env      = "homelab",
     exporter = "ollama-exporter",
   }
