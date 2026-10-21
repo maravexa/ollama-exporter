@@ -32,7 +32,7 @@ remote_write:
     headers:
       X-Scope-OrgID: tenant1
     external_labels:
-      cluster: xena
+      cluster: example-cluster
       env: homelab
 `
 
@@ -76,7 +76,7 @@ func TestLoad_RemoteWrite_Valid(t *testing.T) {
 	if rw.Headers["X-Scope-OrgID"] != "tenant1" {
 		t.Errorf("Headers = %v", rw.Headers)
 	}
-	if rw.ExternalLabels["cluster"] != "xena" || rw.ExternalLabels["env"] != "homelab" {
+	if rw.ExternalLabels["cluster"] != "example-cluster" || rw.ExternalLabels["env"] != "homelab" {
 		t.Errorf("ExternalLabels = %v", rw.ExternalLabels)
 	}
 }

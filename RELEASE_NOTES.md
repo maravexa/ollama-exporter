@@ -32,7 +32,7 @@ remote_write:
     flush_interval: 10s
     bearer_token_file: /run/credentials/exporter/mimir_token
     external_labels:
-      cluster: xena
+      cluster: example-cluster
 ```
 
 Full reference: [docs/remote-write.md](docs/remote-write.md).

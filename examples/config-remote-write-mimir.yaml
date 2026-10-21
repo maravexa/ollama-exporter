@@ -14,7 +14,7 @@ metrics_endpoint:
   listen_address: ":9400"
 
 remote_write:
-  - url: https://mimir.internal.example.com/api/v1/push
+  - url: https://mimir.example.com/api/v1/push
     name: mimir-primary
     flush_interval: 10s
     timeout: 30s
@@ -50,6 +50,6 @@ remote_write:
 
     # Cluster-wide labels stamped onto every series.
     external_labels:
-      cluster: cyberdeck
+      cluster: example-cluster
       env: homelab
       exporter: ollama-exporter
