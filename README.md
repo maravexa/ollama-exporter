@@ -6,9 +6,163 @@ A Prometheus exporter for [Ollama](https://ollama.com). It tracks model residenc
 inference timing and token throughput, with optional GPU metrics and Prometheus
 Remote Write output.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    App["Ollama client"]
+    Proxy["Exporter proxy :9401"]
+    Ollama["Ollama :11434"]
+    Poller["Exporter poller"]
+    Metrics["Exporter metrics :9400"]
+    Prom["Prometheus"]
+    Remote["Remote Write receiver"]
+    Grafana["Grafana"]
+
+    App --> Proxy
+    Proxy -->|Forward inference| Ollama
+    Proxy -->|Observe responses| Metrics
+    Poller -->|Read inventory and residency| Ollama
+    Poller -->|Update gauges| Metrics
+    Prom -->|Scrape /metrics| Metrics
+    Metrics -->|Optional Remote Write| Remote
+    Grafana -->|Query| Prom
+    Grafana -->|Query compatible data source| Remote
+```
+
+## Installation
+
 This README describes the current source tree. Check the
 [release notes](https://github.com/maravexa/ollama-exporter/releases) when using a
 published binary or container; changes on `main` may not be released yet.
+
+The metrics and proxy listeners do not implement authentication or TLS. Restrict
+network access or place them behind a suitable authenticated proxy.
+
+### Binary or source build
+
+Linux amd64 and arm64 binaries, Debian packages and RPM packages are available from
+[GitHub Releases](https://github.com/maravexa/ollama-exporter/releases). After
+extracting a binary, run it with a configuration file:
+
+```bash
+./ollama-exporter --config ./ollama-exporter.yml
+```
+
+To build the current source, use the Go version declared in [go.mod](go.mod)
+(currently 1.26.10):
+
+```bash
+git clone https://github.com/maravexa/ollama-exporter.git
+cd ollama-exporter
+CGO_ENABLED=0 go build -o ollama-exporter ./cmd/exporter
+cp ollama-exporter.yml.example ollama-exporter.yml
+./ollama-exporter --config ./ollama-exporter.yml
+```
+
+The only application flag is `--config`; its default path is
+`/etc/ollama-exporter/ollama-exporter.yml`. A missing file uses built-in defaults.
+For Linux packages, use `sudo apt install ./<deb-file>` or
+`sudo dnf install ./<rpm-file>` with the downloaded filename.
+
+### Docker
+
+For Linux Docker with Ollama reachable through the host gateway:
+
+```bash
+docker run -d \
+  --add-host=host.docker.internal:host-gateway \
+  -e OLLAMA_URL=http://host.docker.internal:11434 \
+  -p 127.0.0.1:9400:9400 -p 127.0.0.1:9401:9401 \
+  ghcr.io/maravexa/ollama-exporter:latest
+```
+
+Ollama must listen on an address reachable from the container; its host-loopback
+listener alone is not sufficient for this Linux bridge-network example. On Docker
+Desktop, omit `--add-host` and use its `host.docker.internal` hostname. Adjust
+published addresses if clients or Prometheus run on another host. Containers are
+Linux builds and do not provide the native macOS GPU backend.
+
+- **9400:** Prometheus `/metrics` and process `/healthz` endpoints.
+- **9401:** Ollama proxy; point inference clients here.
+
+The [Compose file](docker-compose.yml) is a starting point for exporter,
+Prometheus and Grafana services. It does not provision the Grafana dashboard or
+data source. It also needs a Prometheus main configuration and, on Linux, host
+connectivity configured before use; it is not a complete one-command setup.
+
+## Configuration
+
+```yaml
+# ollama-exporter.yml
+ollama_url: "http://localhost:11434"
+listen_addr: ":9400"
+poll_interval: "15s"
+
+proxy:
+  enabled: true
+  # Your app points here instead of Ollama directly
+  listen_addr: ":9401"
+  # Paths forwarded normally but excluded from metric recording.
+  # Prevents internal polling calls from inflating inference histograms.
+  exclude_paths:
+    - "/"
+    - "/api/ps"
+    - "/api/tags"
+    - "/api/show"
+    - "/api/version"
+
+gpu:
+  enabled: true
+  # poll_interval: "5s"           # separate GPU poll interval; inherits poll_interval if unset
+  # sysfs_base: /sys/class/drm   # override for testing
+
+log_level: "info"  # debug | info | warn | error
+```
+
+Optional remote write block (full schema in [docs/remote-write.md](docs/remote-write.md)):
+
+```yaml
+metrics_endpoint:
+  enabled: true            # set to false for push-only
+  listen_address: ":9400"
+
+remote_write:
+  - url: https://mimir.example.com/api/v1/push
+    name: primary
+    flush_interval: 10s
+    bearer_token_file: /run/credentials/exporter/mimir_token
+    external_labels:
+      cluster: example-cluster
+      env: development
+```
+
+Only `OLLAMA_URL` and `LISTEN_ADDR` have environment overrides. An explicitly set
+`metrics_endpoint.listen_address` takes precedence over `LISTEN_ADDR`. Use the
+configuration file for other fields. Remote Write currently uses only the first
+configured endpoint and an in-memory queue; see its reference for durability and
+authentication limits.
+
+## Prometheus scrape configuration
+
+```yaml
+scrape_configs:
+  - job_name: 'ollama'
+    static_configs:
+      - targets: ['localhost:9400']
+```
+
+## Grafana dashboard
+
+Import [deploy/grafana/dashboard.json](deploy/grafana/dashboard.json) and select
+your Prometheus data source. Use scrape job name `ollama` for the dashboard's
+model queries. The overview uses six numeric/status panels in two rows, with
+model, quantization and exporter identity in the legends.
+
+An exporter upgrade does not update an imported dashboard. As of 2026-10-21,
+[Grafana.com dashboard 25086](https://grafana.com/grafana/dashboards/25086-ollama-llm-inference/)
+still serves revision 1, which predates the stat-label and layout fixes. Use the
+repository JSON for those fixes. See [dashboard instructions](deploy/grafana/README.md).
 
 ## How it works
 
@@ -24,12 +178,18 @@ Native `/api/generate` and `/api/chat` support NDJSON streams and single-object
 `stream:false` responses. The proxy forwards original response bytes, including
 thinking fields, and flushes each read without accumulating the response body.
 
-On a Linux test host with Open WebUI 0.12.3, Ollama 0.34.0 and `qwen3.5:9b`, manual checks
-confirmed progressive thinking through the proxy and, in a separate matched test
-with thinking disabled, progressive answers on both direct and proxied routes.
-These checks did not verify an Open WebUI thinking-to-answer transition within one
-response, live `/v1` behavior, or Jetpack/Orin. See the
-[scoped validation](https://github.com/maravexa/ollama-exporter/issues/27#issuecomment-6324349163).
+### Output: Pull and/or Push
+
+By default the exporter exposes `/metrics` for Prometheus to scrape. Optionally
+it can also (or instead) **push** samples to any Prometheus Remote Write 1.0
+endpoint — Mimir, Grafana Cloud, Thanos Receive, VictoriaMetrics, or anything
+else that speaks the protocol. Push and pull work together; either can be
+disabled.
+
+See [docs/remote-write.md](docs/remote-write.md) for the full reference,
+[docs/alloy-vs-native-push.md](docs/alloy-vs-native-push.md) for guidance on
+when to use which approach, and [examples/](examples/) for ready-to-edit
+configs against Mimir and Grafana Cloud.
 
 ### Compatibility routes and usage
 
@@ -91,18 +251,7 @@ Historical toolchain and live-test evidence is retained in
 [the Ollama 0.40.3 live results](docs/live-validation.txt). These are dated results,
 not substitutes for the current CI gate.
 
-### Output: Pull and/or Push
-
-By default the exporter exposes `/metrics` for Prometheus to scrape. Optionally
-it can also (or instead) **push** samples to any Prometheus Remote Write 1.0
-endpoint — Mimir, Grafana Cloud, Thanos Receive, VictoriaMetrics, or anything
-else that speaks the protocol. Push and pull work together; either can be
-disabled.
-
-See [docs/remote-write.md](docs/remote-write.md) for the full reference,
-[docs/alloy-vs-native-push.md](docs/alloy-vs-native-push.md) for guidance on
-when to use which approach, and [examples/](examples/) for ready-to-edit
-configs against Mimir and Grafana Cloud.
+## Metrics reference
 
 ### Metric labels and lifetime
 
@@ -166,134 +315,7 @@ Temperature, power and clock metrics are not emitted on macOS. Labels are `gpu="
 
 Full reference: [docs/metrics.md](docs/metrics.md)
 
-## Installation
-
-### Binary or source build
-
-Linux amd64 and arm64 binaries, Debian packages and RPM packages are available from
-[GitHub Releases](https://github.com/maravexa/ollama-exporter/releases). After
-extracting a binary, run it with a configuration file:
-
-```bash
-./ollama-exporter --config ./ollama-exporter.yml
-```
-
-To build the current source, use the Go version declared in [go.mod](go.mod)
-(currently 1.26.10):
-
-```bash
-git clone https://github.com/maravexa/ollama-exporter.git
-cd ollama-exporter
-CGO_ENABLED=0 go build -o ollama-exporter ./cmd/exporter
-cp ollama-exporter.yml.example ollama-exporter.yml
-./ollama-exporter --config ./ollama-exporter.yml
-```
-
-The only application flag is `--config`; its default path is
-`/etc/ollama-exporter/ollama-exporter.yml`. A missing file uses built-in defaults.
-For Linux packages, use `sudo apt install ./<deb-file>` or
-`sudo dnf install ./<rpm-file>` with the downloaded filename.
-
-### Docker
-
-For Linux Docker with Ollama reachable through the host gateway:
-
-```bash
-docker run -d \
-  --add-host=host.docker.internal:host-gateway \
-  -e OLLAMA_URL=http://host.docker.internal:11434 \
-  -p 127.0.0.1:9400:9400 -p 127.0.0.1:9401:9401 \
-  ghcr.io/maravexa/ollama-exporter:latest
-```
-
-Ollama must listen on an address reachable from the container; its host-loopback
-listener alone is not sufficient for this Linux bridge-network example. On Docker
-Desktop, omit `--add-host` and use its `host.docker.internal` hostname. Adjust
-published addresses if clients or Prometheus run on another host. Containers are
-Linux builds and do not provide the native macOS GPU backend.
-
-- **9400:** Prometheus `/metrics` and process `/healthz` endpoints.
-- **9401:** Ollama proxy; point inference clients here.
-
-The [Compose file](docker-compose.yml) is a starting point for exporter,
-Prometheus and Grafana services. It does not provision the Grafana dashboard or
-data source. It also needs a Prometheus main configuration and, on Linux, host
-connectivity configured before use; it is not a complete one-command setup.
-
-### Grafana dashboard
-
-Import [deploy/grafana/dashboard.json](deploy/grafana/dashboard.json) and select
-your Prometheus data source. Use scrape job name `ollama` for the dashboard's
-model queries. The overview uses six numeric/status panels in two rows, with
-model, quantization and exporter identity in the legends.
-
-An exporter upgrade does not update an imported dashboard. As of 2026-10-21,
-[Grafana.com dashboard 25086](https://grafana.com/grafana/dashboards/25086-ollama-llm-inference/)
-still serves revision 1, which predates the stat-label and layout fixes. Use the
-repository JSON for those fixes. See [dashboard instructions](deploy/grafana/README.md).
-
-## Configuration
-
-```yaml
-# ollama-exporter.yml
-ollama_url: "http://localhost:11434"
-listen_addr: ":9400"
-poll_interval: "15s"
-
-proxy:
-  enabled: true
-  # Your app points here instead of Ollama directly
-  listen_addr: ":9401"
-  # Paths forwarded normally but excluded from metric recording.
-  # Prevents internal polling calls from inflating inference histograms.
-  exclude_paths:
-    - "/"
-    - "/api/ps"
-    - "/api/tags"
-    - "/api/show"
-    - "/api/version"
-
-gpu:
-  enabled: true
-  # poll_interval: "5s"           # separate GPU poll interval; inherits poll_interval if unset
-  # sysfs_base: /sys/class/drm   # override for testing
-
-log_level: "info"  # debug | info | warn | error
-```
-
-Optional remote write block (full schema in [docs/remote-write.md](docs/remote-write.md)):
-
-```yaml
-metrics_endpoint:
-  enabled: true            # set to false for push-only
-  listen_address: ":9400"
-
-remote_write:
-  - url: https://mimir.example.com/api/v1/push
-    name: primary
-    flush_interval: 10s
-    bearer_token_file: /run/credentials/exporter/mimir_token
-    external_labels:
-      cluster: example-cluster
-      env: development
-```
-
-Only `OLLAMA_URL` and `LISTEN_ADDR` have environment overrides. An explicitly set
-`metrics_endpoint.listen_address` takes precedence over `LISTEN_ADDR`. Use the
-configuration file for other fields. Remote Write currently uses only the first
-configured endpoint and an in-memory queue; see its reference for durability and
-authentication limits.
-
-## Prometheus Scrape Config
-
-```yaml
-scrape_configs:
-  - job_name: 'ollama'
-    static_configs:
-      - targets: ['localhost:9400']
-```
-
-## GPU Metrics
+## GPU metrics
 
 ### Linux (AMD)
 
@@ -355,8 +377,7 @@ The exporter builds with `CGO_ENABLED=0`. Runtime container images use
 `distroless/static:nonroot`. Dependencies include Prometheus client libraries,
 Remote Write protobuf types and Snappy; see [go.mod](go.mod) for the full list.
 
-The metrics and proxy listeners do not implement authentication or TLS. Restrict
-network access or place them behind a suitable authenticated proxy. Remote Write
+Remote Write
 credentials are file-referenced; inline passwords and bearer tokens are rejected.
 
 CI checks Linux amd64/arm64 production vulnerability applicability with a
@@ -365,29 +386,14 @@ conditional and expire; they are not a claim that every dependency or platform
 is free of vulnerabilities. Linux amd64/arm64 and Darwin arm64 are compile targets;
 compile success does not establish runtime compatibility on every host.
 
-## Architecture
+### Live validation
 
-```mermaid
-flowchart LR
-    App["Ollama client"]
-    Proxy["Exporter proxy :9401"]
-    Ollama["Ollama :11434"]
-    Poller["Exporter poller"]
-    Metrics["Exporter metrics :9400"]
-    Prom["Prometheus"]
-    Remote["Remote Write receiver"]
-    Grafana["Grafana"]
-
-    App --> Proxy
-    Proxy -->|Forward inference| Ollama
-    Proxy -->|Observe responses| Metrics
-    Poller -->|Read inventory and residency| Ollama
-    Poller -->|Update gauges| Metrics
-    Prom -->|Scrape /metrics| Metrics
-    Metrics -->|Optional Remote Write| Remote
-    Grafana -->|Query| Prom
-    Grafana -->|Query compatible data source| Remote
-```
+On a Linux test host with Open WebUI 0.12.3, Ollama 0.34.0 and `qwen3.5:9b`, manual checks
+confirmed progressive thinking through the proxy and, in a separate matched test
+with thinking disabled, progressive answers on both direct and proxied routes.
+These checks did not verify an Open WebUI thinking-to-answer transition within one
+response, live `/v1` behavior, or Jetpack/Orin. See the
+[scoped validation](https://github.com/maravexa/ollama-exporter/issues/27#issuecomment-6324349163).
 
 ## Development
 
