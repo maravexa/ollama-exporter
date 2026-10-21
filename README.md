@@ -2,40 +2,34 @@
 
 [![CI](https://github.com/maravexa/ollama-exporter/actions/workflows/ci.yaml/badge.svg)](https://github.com/maravexa/ollama-exporter/actions/workflows/ci.yaml)
 
-A production-grade Go Prometheus exporter for [Ollama](https://ollama.com) LLM inference.
+A Prometheus exporter for [Ollama](https://ollama.com). It tracks model residency,
+inference timing and token throughput, with optional GPU metrics and Prometheus
+Remote Write output.
 
-Exposes per-request inference metrics, model lifecycle events, and derived AI-specific
-signals that no existing exporter provides — built in pure Go with zero unnecessary
-dependencies, following node_exporter/blackbox_exporter conventions.
+This README describes the current source tree. Check the
+[release notes](https://github.com/maravexa/ollama-exporter/releases) when using a
+published binary or container; changes on `main` may not be released yet.
 
-## Why This Exists
+## How it works
 
-Ollama has no native `/metrics` endpoint. Existing community exporters are Python proxies
-or minimal Go stubs. None expose the semantic layer that matters for serious LLM
-observability: tokens-per-second by quantization level, KV cache pressure inference,
-model load/eviction event tracking, or in-flight concurrency.
+- **Poller:** reads `/api/ps` and `/api/tags` for model inventory and memory state.
+- **Proxy:** forwards requests to Ollama and extracts inference metrics from
+  responses. Point your client at port **9401** to collect per-request metrics.
+- **Output:** serves `/metrics` on port **9400**, with optional Remote Write push.
 
-This exporter was designed from first principles for a local AI safety research stack,
-where inference signals need to correlate with behavioral probe results (Garak, SAE
-interpretability) in the same Grafana instance.
+Polling runs independently of the proxy. If Ollama itself is unreachable, polling
+cannot provide fresh model state; `ollama_up` reports that failure.
 
-## Design
+Native `/api/generate` and `/api/chat` support NDJSON streams and single-object
+`stream:false` responses. The proxy forwards original response bytes, including
+thinking fields, and flushes each read without accumulating the response body.
 
-### Two Collection Modes
-
-**Poller** scrapes `/api/ps` and `/api/tags` on a configurable interval. Provides
-model inventory and VRAM state. Always-on baseline — survives proxy failures.
-
-**Proxy** sits transparently in front of Ollama. Your application points at the
-exporter instead of Ollama directly. The exporter intercepts request/response pairs,
-observes Ollama's response fields while forwarding the original bytes downstream.
-Native `/api/generate` and `/api/chat` support NDJSON streaming and single-object
-`stream:false` responses. Unknown fields, including thinking content, pass through
-unchanged; live thinking-model and Open WebUI rendering remain untested. Each read is flushed promptly;
-response bodies are neither accumulated nor read ahead by the metrics observer.
-
-If proxy health check fails, the exporter degrades gracefully to poller-only mode.
-Prometheus continues receiving model state metrics without interruption.
+On Xena with Open WebUI 0.12.3, Ollama 0.34.0 and `qwen3.5:9b`, manual checks
+confirmed progressive thinking through the proxy and, in a separate matched test
+with thinking disabled, progressive answers on both direct and proxied routes.
+These checks did not verify an Open WebUI thinking-to-answer transition within one
+response, live `/v1` behavior, or Jetpack/Orin. See the
+[scoped validation](https://github.com/maravexa/ollama-exporter/issues/27#issuecomment-6324349163).
 
 ### Compatibility routes and usage
 
@@ -76,7 +70,7 @@ usage. It does not count every HTTP request; the duration histogram counts
 proxied requests unless their paths are configured as excluded. Non-2xx responses
 are forwarded without inference extraction. Exclusions also disable extraction.
 
-The parser uses no new dependencies. It validates JSON incrementally, skipping
+The metrics parser validates JSON incrementally, skipping
 large generated strings and context arrays with bounded storage; there is no
 object or line size limit. Nesting beyond 64 levels or selected scalar values
 beyond 4096 encoded bytes disables extraction while forwarding continues. Field
@@ -91,10 +85,11 @@ incomplete responses, invalid fields, malformed JSON, upstream errors, and parse
 limits. Oversized field names have a separate skip counter so useful metrics from
 other fields remain visible. See [the metric reference](docs/metrics.md#extraction-diagnostics-proxy-mode).
 CI and scheduled scans use [the shared production vulnerability gate](docs/vulnerability-gate.md).
-For project-toolchain validation and security applicability, see
-[the final security gate](docs/security-gate.txt),
-[the earlier release assessment](docs/release-validation.txt), and
-[the Ollama 0.40.3 live results](docs/live-validation.txt).
+Historical toolchain and live-test evidence is retained in
+[the security assessment](docs/security-assessment.txt),
+[the release assessment](docs/release-validation.txt), and
+[the Ollama 0.40.3 live results](docs/live-validation.txt). These are dated results,
+not substitutes for the current CI gate.
 
 ### Output: Pull and/or Push
 
@@ -109,14 +104,17 @@ See [docs/remote-write.md](docs/remote-write.md) for the full reference,
 when to use which approach, and [examples/](examples/) for ready-to-edit
 configs against Mimir and Grafana Cloud.
 
-### Metric Design
+### Metric labels and lifetime
 
-- Namespace: `ollama_`
-- Quantization parsed from model tag into discrete label: `quant="q4_0"`
-- Model family parsed into label: `family="llama3"`
-- Histograms for latency (not summaries)
-- Derived metrics (TPS, KV pressure) computed at scrape time
-- Prompt text never appears in labels — no cardinality explosions
+Metrics use the `ollama_` prefix. Model metrics include model, family and
+quantization labels; proxy metrics may also include the endpoint. Prompt and
+response text are not metric labels. Model names still contribute to cardinality.
+
+Throughput gauges are calculated from reported inference timings when responses
+complete. The KV-pressure metric is a prompt-evaluation timing proxy, not a direct
+measurement of KV-cache occupancy. Deleted models are removed from current-state
+gauges and the metadata cache after a successful inventory poll. Cumulative
+counters, histograms and Prometheus history remain available.
 
 ### Key Metrics
 
@@ -168,64 +166,71 @@ Temperature, power and clock metrics are not emitted on macOS. Labels are `gpu="
 
 Full reference: [docs/metrics.md](docs/metrics.md)
 
-## Quick Start
+## Installation
 
-### Binary
+### Binary or source build
+
+Linux amd64 and arm64 binaries, Debian packages and RPM packages are available from
+[GitHub Releases](https://github.com/maravexa/ollama-exporter/releases). After
+extracting a binary, run it with a configuration file:
 
 ```bash
-go install github.com/maravexa/ollama-exporter/cmd/exporter@latest
-ollama-exporter --ollama-url http://localhost:11434 --listen :9400
+./ollama-exporter --config ./ollama-exporter.yml
 ```
+
+To build the current source, use the Go version declared in [go.mod](go.mod)
+(currently 1.26.10):
 
 ```bash
-# Debian/Ubuntu
-sudo apt install ./<deb-file>
-
-# RPM
-sudo yum install ./<rpm-file>
+git clone https://github.com/maravexa/ollama-exporter.git
+cd ollama-exporter
+CGO_ENABLED=0 go build -o ollama-exporter ./cmd/exporter
+cp ollama-exporter.yml.example ollama-exporter.yml
+./ollama-exporter --config ./ollama-exporter.yml
 ```
+
+The only application flag is `--config`; its default path is
+`/etc/ollama-exporter/ollama-exporter.yml`. A missing file uses built-in defaults.
+For Linux packages, use `sudo apt install ./<deb-file>` or
+`sudo dnf install ./<rpm-file>` with the downloaded filename.
 
 ### Docker
 
-Linux (host.docker.internal requires --add-host flag):
+For Linux Docker with Ollama reachable through the host gateway:
 
 ```bash
 docker run -d \
   --add-host=host.docker.internal:host-gateway \
   -e OLLAMA_URL=http://host.docker.internal:11434 \
-  -p 9400:9400 -p 9401:9401 \
+  -p 127.0.0.1:9400:9400 -p 127.0.0.1:9401:9401 \
   ghcr.io/maravexa/ollama-exporter:latest
 ```
 
-macOS / Windows (host.docker.internal resolves automatically):
+Ollama must listen on an address reachable from the container; its host-loopback
+listener alone is not sufficient for this Linux bridge-network example. On Docker
+Desktop, omit `--add-host` and use its `host.docker.internal` hostname. Adjust
+published addresses if clients or Prometheus run on another host. Containers are
+Linux builds and do not provide the native macOS GPU backend.
 
-```bash
-docker run -d \
-  -e OLLAMA_URL=http://host.docker.internal:11434 \
-  -p 9400:9400 -p 9401:9401 \
-  ghcr.io/maravexa/ollama-exporter:latest
-```
+- **9400:** Prometheus `/metrics` and process `/healthz` endpoints.
+- **9401:** Ollama proxy; point inference clients here.
 
-Or use your host's LAN IP directly (works everywhere):
+The [Compose file](docker-compose.yml) is a starting point for exporter,
+Prometheus and Grafana services. It does not provision the Grafana dashboard or
+data source. It also needs a Prometheus main configuration and, on Linux, host
+connectivity configured before use; it is not a complete one-command setup.
 
-```bash
-docker run -d \
-  -e OLLAMA_URL=http://192.168.1.x:11434 \
-  -p 9400:9400 -p 9401:9401 \
-  ghcr.io/maravexa/ollama-exporter:latest
-```
+### Grafana dashboard
 
-Port reference:
-- 9400 — Prometheus metrics endpoint (`/metrics`)
-- 9401 — Transparent proxy (point your Ollama client here)
+Import [deploy/grafana/dashboard.json](deploy/grafana/dashboard.json) and select
+your Prometheus data source. Use scrape job name `ollama` for the dashboard's
+model queries. The overview uses six numeric/status panels in two rows, with
+model, quantization and exporter identity in the legends.
 
-### Docker Compose (full PLG stack)
-
-```bash
-docker compose up -d
-```
-
-Includes: ollama-exporter, Prometheus, Grafana with pre-built dashboard.
+An exporter upgrade does not update an imported dashboard. As of 2026-10-21,
+[Grafana.com dashboard 25086](https://grafana.com/grafana/dashboards/25086-ollama-llm-inference/)
+still serves revision 1, which predates the stat-label and layout fixes. Use the
+repository JSON for those fixes. See [dashboard instructions](deploy/grafana/README.md).
 
 ## Configuration
 
@@ -269,11 +274,15 @@ remote_write:
     flush_interval: 10s
     bearer_token_file: /run/credentials/exporter/mimir_token
     external_labels:
-      cluster: xena
-      env: homelab
+      cluster: example-cluster
+      env: development
 ```
 
-All fields overridable via environment variables: `OLLAMA_URL`, `LISTEN_ADDR`, etc.
+Only `OLLAMA_URL` and `LISTEN_ADDR` have environment overrides. An explicitly set
+`metrics_endpoint.listen_address` takes precedence over `LISTEN_ADDR`. Use the
+configuration file for other fields. Remote Write currently uses only the first
+configured endpoint and an in-memory queue; see its reference for durability and
+authentication limits.
 
 ## Prometheus Scrape Config
 
@@ -288,12 +297,9 @@ scrape_configs:
 
 ### Linux (AMD)
 
-The exporter collects AMD GPU hardware metrics directly from the Linux kernel's
-sysfs interface exposed by the **amdgpu** driver. **No ROCm installation is
-required** — `rocm-smi`, `amd-smi`, and all ROCm userspace packages are
-completely absent from the dependency tree.
-
-#### How It Works
+The Linux GPU collector reads the **amdgpu** sysfs interface. It does not require
+ROCm tools. This hardware collector is separate from Ollama inference metrics;
+there is no NVIDIA hardware-metrics backend.
 
 On startup the exporter scans `/sys/class/drm/card*` for directories whose
 `device/vendor` file contains AMD's vendor ID (`0x1002`). For each discovered
@@ -306,10 +312,9 @@ unexpected content (e.g. `gpu_busy_percent` returns `ENOTSUP` on some older
 cards), that metric is skipped for the current cycle and a debug-level log line
 is emitted. All other metrics continue unaffected.
 
-#### Access Requirements
-
-All paths under `/sys/class/drm/` are world-readable by default on Linux —
-no special capabilities or sudo are needed to run the exporter.
+The collector needs read access to the relevant `/sys/class/drm/` files. Access
+depends on the host and container mounts; missing or unreadable files do not
+produce that metric.
 
 ### macOS (Apple Silicon)
 
@@ -321,9 +326,15 @@ available this way; temperature, power and clocks would need root
 
 **Support scope:** the backend runs only when `sysctl hw.optional.arm64` reports
 `1` (Apple Silicon, including amd64 builds under Rosetta 2). On Intel Macs it
-disables itself with a warning. It has been verified on an Apple M4; other
-M-series chips are expected to expose the same IOAccelerator keys but are
-untested.
+disables itself with a warning. Contributor [hkuehl](https://github.com/hkuehl)
+reported validation on an Apple M4; see [the contribution](https://github.com/maravexa/ollama-exporter/pull/26)
+and [its integration](https://github.com/maravexa/ollama-exporter/pull/34). Other
+M-series chips, Intel Macs and Rosetta operation have not been independently
+runtime-validated here. CI cross-compiles Darwin arm64; it does not run macOS tests.
+Current release packaging produces Linux artifacts only.
+
+The memory gauges describe shared physical/unified memory, not dedicated VRAM.
+Utilization covers the whole GPU, not only Ollama.
 
 **Failure handling:** if `ioreg` fails or returns no statistics, the utilization
 and in-use memory series are removed (not frozen at their last value) and the
@@ -338,66 +349,69 @@ entirely. On Linux the exporter also disables GPU metrics automatically (with a
 warning) when no AMD GPUs are found at startup; on macOS it does so on non–Apple
 Silicon hosts. Other platforms have no GPU backend.
 
-## Security Properties
+## Security and validation scope
 
-- Pure Go — no CGo, statically linkable
-- Dependencies: stdlib + `prometheus/client_golang` only
-- Dockerfile: distroless/static base, runs as uid 65534 (nobody)
-- No dynamic code loading, no eval, no reflection-based config
+The exporter builds with `CGO_ENABLED=0`. Runtime container images use
+`distroless/static:nonroot`. Dependencies include Prometheus client libraries,
+Remote Write protobuf types and Snappy; see [go.mod](go.mod) for the full list.
 
-## Compatibility
+The metrics and proxy listeners do not implement authentication or TLS. Restrict
+network access or place them behind a suitable authenticated proxy. Remote Write
+credentials are file-referenced; inline passwords and bearer tokens are rejected.
 
-Tested against Ollama 0.3.x and 0.4.x on:
-- Linux (amd64, arm64)
-- Local inference: AMD RX 6700 XT (ROCm 6.3), NVIDIA (CUDA)
+CI checks Linux amd64/arm64 production vulnerability applicability with a
+[fail-closed gate](docs/vulnerability-gate.md). Its reviewed exceptions are
+conditional and expire; they are not a claim that every dependency or platform
+is free of vulnerabilities. Linux amd64/arm64 and Darwin arm64 are compile targets;
+compile success does not establish runtime compatibility on every host.
 
-## Architecture Context
-
-This exporter is part of a local AI safety observability stack:
+## Architecture
 
 ```mermaid
-flowchart TD
-    App["Your Application"]
+flowchart LR
+    App["Ollama client"]
+    Proxy["Exporter proxy :9401"]
     Ollama["Ollama :11434"]
-    Proxy["ollama-exporter\n:9401 (proxy)"]
-    Metrics["ollama-exporter\n:9400 (/metrics)"]
+    Poller["Exporter poller"]
+    Metrics["Exporter metrics :9400"]
     Prom["Prometheus"]
+    Remote["Remote Write receiver"]
     Grafana["Grafana"]
-    Garak["garak-axis\nLLM vulnerability +\nalignment displacement signals"]
-    SAE["SAELens\nsparse autoencoder\nfeature monitoring"]
 
-    App -- "inference requests" --> Proxy
-    Proxy -- "forward + extract timings" --> Ollama
-    Proxy -- "per-request metrics" --> Metrics
-    Ollama -- "poll /api/ps & /api/tags" --> Metrics
-    Metrics -- "scrape" --> Prom
-    Garak -- "probe signals" --> Prom
-    SAE -- "feature signals" --> Prom
-    Prom --> Grafana
+    App --> Proxy
+    Proxy -->|Forward inference| Ollama
+    Proxy -->|Observe responses| Metrics
+    Poller -->|Read inventory and residency| Ollama
+    Poller -->|Update gauges| Metrics
+    Prom -->|Scrape /metrics| Metrics
+    Metrics -->|Optional Remote Write| Remote
+    Grafana -->|Query| Prom
+    Grafana -->|Query compatible data source| Remote
 ```
-
-Inference metrics correlate with behavioral probe results in a single Grafana instance.
 
 ## Development
 
-CI runs automatically on all PRs and pushes to main (lint, test with race detector,
-govulncheck reachability analysis, and cross-platform build verification).
+CI runs lint, race tests with a 60% coverage floor, the production vulnerability
+gate, and Linux amd64/arm64 plus Darwin arm64 compile checks. Use the Go version
+in `go.mod` and the linter version pinned in [CI](.github/workflows/ci.yaml).
 
-Run the full CI suite locally before pushing:
-
-```bash
-make ci
-```
-
-Run individual checks:
+With those tools installed, run the local formatting, vet, lint and test targets:
 
 ```bash
-make lint       # golangci-lint
-make test       # go test -race with coverage report
-make vulncheck  # govulncheck reachability analysis
-make fmt        # verify gofmt formatting (non-destructive)
-make vet        # go vet
+make fmt vet lint test
 ```
+
+Run the same vulnerability assessment used by CI separately:
+
+```bash
+python3 -m unittest discover -s scripts -p 'test_vulnerability_gate.py' -v
+python3 scripts/vulnerability_gate.py --output /tmp/ollama-vulnerability-results
+```
+
+The output directory must not already exist. The gate needs network access and
+installs its pinned scanner; see [the gate reference](docs/vulnerability-gate.md).
+`make ci` and `make vulncheck` use a separate raw `govulncheck@latest` target and
+are not equivalent to the reviewed CI gate.
 
 ## License
 
