@@ -70,6 +70,10 @@ jobs:
       matrix:
         goos: [linux]
         goarch: [amd64, arm64]
+        include:
+          # Compile-only check for the Apple Silicon (ioreg) GPU backend.
+          - goos: darwin
+            goarch: arm64
     steps:
       - uses: actions/checkout@v4
 

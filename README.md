@@ -92,6 +92,16 @@ configs against Mimir and Grafana Cloud.
 
 All GPU metrics carry `gpu` (card index: "0", "1", …) and `name` (product name or "amdgpu_cardN") labels.
 
+#### GPU Metrics (Apple Silicon, macOS)
+
+| Metric | Type | Description |
+|---|---|---|
+| `ollama_gpu_utilization_percent` | Gauge | Whole-GPU utilization 0–100, from IOAccelerator `Device Utilization %` (includes display/compositor work) |
+| `ollama_gpu_vram_used_bytes` | Gauge | GPU footprint in unified memory, from IOAccelerator `In use system memory` |
+| `ollama_gpu_vram_total_bytes` | Gauge | Total unified memory, from `sysctl hw.memsize` (cached at startup) |
+
+Temperature, power and clock metrics are not emitted on macOS. Labels are `gpu="0"` and `name` (from `machdep.cpu.brand_string`, e.g. "Apple M4").
+
 Full reference: [docs/metrics.md](docs/metrics.md)
 
 ## Quick Start
@@ -212,12 +222,14 @@ scrape_configs:
 
 ## GPU Metrics
 
+### Linux (AMD)
+
 The exporter collects AMD GPU hardware metrics directly from the Linux kernel's
 sysfs interface exposed by the **amdgpu** driver. **No ROCm installation is
 required** — `rocm-smi`, `amd-smi`, and all ROCm userspace packages are
 completely absent from the dependency tree.
 
-### How It Works
+#### How It Works
 
 On startup the exporter scans `/sys/class/drm/card*` for directories whose
 `device/vendor` file contains AMD's vendor ID (`0x1002`). For each discovered
@@ -230,16 +242,37 @@ unexpected content (e.g. `gpu_busy_percent` returns `ENOTSUP` on some older
 cards), that metric is skipped for the current cycle and a debug-level log line
 is emitted. All other metrics continue unaffected.
 
-### Access Requirements
+#### Access Requirements
 
 All paths under `/sys/class/drm/` are world-readable by default on Linux —
 no special capabilities or sudo are needed to run the exporter.
 
+### macOS (Apple Silicon)
+
+On macOS the exporter reads the integrated GPU's `PerformanceStatistics` from
+the IOKit registry by running `ioreg -r -d 1 -c IOAccelerator` each poll. No
+root, CGo or extra packages are needed. Only utilization and memory are
+available this way; temperature, power and clocks would need root
+(`powermetrics`) or private frameworks, so they are omitted.
+
+**Support scope:** the backend runs only when `sysctl hw.optional.arm64` reports
+`1` (Apple Silicon, including amd64 builds under Rosetta 2). On Intel Macs it
+disables itself with a warning. It has been verified on an Apple M4; other
+M-series chips are expected to expose the same IOAccelerator keys but are
+untested.
+
+**Failure handling:** if `ioreg` fails or returns no statistics, the utilization
+and in-use memory series are removed (not frozen at their last value) and the
+exporter retries on every poll interval, including when the very first poll at
+startup fails. A reported in-use memory of 0 is exported as 0; if the key is
+missing the series is removed.
+
 ### Disabling GPU Collection
 
 Set `gpu.enabled: false` in `ollama-exporter.yml` to disable GPU metric collection
-entirely. The exporter also disables GPU metrics automatically (with a warning)
-when no AMD GPUs are found at startup.
+entirely. On Linux the exporter also disables GPU metrics automatically (with a
+warning) when no AMD GPUs are found at startup; on macOS it does so on non–Apple
+Silicon hosts. Other platforms have no GPU backend.
 
 ## Security Properties
 

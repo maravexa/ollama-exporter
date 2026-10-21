@@ -21,7 +21,7 @@ func TestParseIOAcceleratorReal(t *testing.T) {
 		t.Errorf("UtilizationPercent = %v, want 42", s.UtilizationPercent)
 	}
 	// Must pick the exact "In use system memory" key, not the "(driver)" decoy.
-	if s.InUseMemoryBytes != 20681818112 {
+	if !s.HasInUseMemory || s.InUseMemoryBytes != 20681818112 {
 		t.Errorf("InUseMemoryBytes = %d, want 20681818112", s.InUseMemoryBytes)
 	}
 }
@@ -33,12 +33,23 @@ func TestParseIOAcceleratorMissing(t *testing.T) {
 }
 
 func TestParseIOAcceleratorUtilOnly(t *testing.T) {
-	// Utilization present but no in-use memory line: ok=true, memory stays 0.
+	// Utilization present but no in-use memory line: ok=true, memory absent.
 	s, ok := parseIOAccelerator(`"Device Utilization %"=7`)
 	if !ok {
 		t.Fatal("expected ok=true")
 	}
-	if s.UtilizationPercent != 7 || s.InUseMemoryBytes != 0 {
-		t.Errorf("got util=%v mem=%d, want util=7 mem=0", s.UtilizationPercent, s.InUseMemoryBytes)
+	if s.UtilizationPercent != 7 || s.HasInUseMemory {
+		t.Errorf("got util=%v hasMem=%v, want util=7 hasMem=false", s.UtilizationPercent, s.HasInUseMemory)
+	}
+}
+
+func TestParseIOAcceleratorZeroMemory(t *testing.T) {
+	// A present zero is a real reading, distinct from a missing key.
+	s, ok := parseIOAccelerator(`"Device Utilization %"=0,"In use system memory"=0`)
+	if !ok {
+		t.Fatal("expected ok=true")
+	}
+	if !s.HasInUseMemory || s.InUseMemoryBytes != 0 {
+		t.Errorf("got hasMem=%v mem=%d, want hasMem=true mem=0", s.HasInUseMemory, s.InUseMemoryBytes)
 	}
 }
