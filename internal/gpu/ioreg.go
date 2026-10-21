@@ -11,8 +11,11 @@ type ioAccelStats struct {
 	// UtilizationPercent is the whole-GPU "Device Utilization %" (0–100).
 	UtilizationPercent float64
 	// InUseMemoryBytes is "In use system memory" — the GPU's live footprint in
-	// the unified memory pool, in bytes.
+	// the unified memory pool, in bytes. Only meaningful when HasInUseMemory.
 	InUseMemoryBytes uint64
+	// HasInUseMemory reports whether "In use system memory" was present and
+	// parseable. It distinguishes a genuine zero reading from a missing key.
+	HasInUseMemory bool
 }
 
 var (
@@ -48,6 +51,7 @@ func parseIOAccelerator(raw string) (ioAccelStats, bool) {
 	if mm := reInUseMem.FindStringSubmatch(raw); mm != nil {
 		if n, perr := strconv.ParseUint(mm[1], 10, 64); perr == nil {
 			s.InUseMemoryBytes = n
+			s.HasInUseMemory = true
 		}
 	}
 
