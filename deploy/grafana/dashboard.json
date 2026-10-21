@@ -79,25 +79,25 @@
   "panels": [
     {
       "id": 1,
-      "title": "Ollama Status",
+      "title": "",
       "type": "stat",
       "datasource": "${datasource}",
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 8,
+        "w": 6,
         "h": 4
       },
       "options": {
         "reduceOptions": {
           "calcs": [
-            "lastNotNull"
+            "last"
           ]
         },
         "orientation": "auto",
         "textMode": "value_and_name",
         "colorMode": "background",
-        "graphMode": "none",
+        "graphMode": "area",
         "justifyMode": "auto",
         "text": {
           "titleSize": 12,
@@ -106,79 +106,88 @@
       },
       "fieldConfig": {
         "defaults": {
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "1": {
-                  "text": "UP",
-                  "color": "green",
-                  "index": 0
-                }
-              }
-            },
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "DOWN",
-                  "color": "red",
-                  "index": 1
-                }
-              }
-            }
-          ],
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
-              },
-              {
                 "color": "green",
-                "value": 1
+                "value": null
               }
             ]
           },
           "color": {
             "mode": "thresholds"
-          }
+          },
+          "noValue": "Unknown",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            }
+          ]
         },
         "overrides": []
       },
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "ollama_up",
-          "legendFormat": "{{instance}}",
+          "expr": "(sum(ollama_up{job=\"ollama\"})) or vector(0 / 0)",
+          "legendFormat": "Reachable",
           "refId": "A",
-          "instant": true,
-          "range": false
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        },
+        {
+          "datasource": "${datasource}",
+          "expr": "(count(ollama_up{job=\"ollama\"})) or vector(0 / 0)",
+          "legendFormat": "Observed",
+          "refId": "B",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
         }
-      ]
+      ],
+      "description": "Reachable Ollama APIs / exporters with a current status sample. Disappeared scrape targets are not counted; this is not a scrape-target health check. Sparkline shows aggregate history across the selected range; the number is its latest evaluated sample. Missing samples remain Unknown, not a stale last-known value."
     },
     {
       "id": 2,
-      "title": "Model Loaded",
+      "title": "",
       "type": "stat",
       "datasource": "${datasource}",
       "gridPos": {
-        "x": 8,
+        "x": 6,
         "y": 0,
-        "w": 8,
+        "w": 6,
         "h": 4
       },
       "options": {
         "reduceOptions": {
           "calcs": [
-            "lastNotNull"
+            "last"
           ]
         },
         "orientation": "auto",
         "textMode": "value_and_name",
         "colorMode": "background",
-        "graphMode": "none",
+        "graphMode": "area",
         "justifyMode": "auto",
         "text": {
           "titleSize": 12,
@@ -187,79 +196,79 @@
       },
       "fieldConfig": {
         "defaults": {
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "1": {
-                  "text": "IN VRAM",
-                  "color": "green",
-                  "index": 0
-                }
-              }
-            },
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "UNLOADED",
-                  "color": "yellow",
-                  "index": 1
-                }
-              }
-            }
-          ],
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "yellow",
-                "value": null
-              },
-              {
                 "color": "green",
-                "value": 1
+                "value": null
               }
             ]
           },
           "color": {
             "mode": "thresholds"
-          }
+          },
+          "noValue": "Unknown",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            }
+          ]
         },
         "overrides": []
       },
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "ollama_model_loaded{job=\"ollama\"}",
-          "legendFormat": "{{model}} {{quant}} @ {{instance}}",
+          "expr": "(sum(ollama_model_loaded{job=\"ollama\"})) or vector(0 / 0)",
+          "legendFormat": "Loaded models",
           "refId": "A",
-          "instant": true,
-          "range": false
+          "instant": false,
+          "range": true,
+          "format": "time_series"
         }
-      ]
+      ],
+      "description": "Counts each loaded model on each exporter separately. Sparkline shows aggregate history across the selected range; the number is its latest evaluated sample. Missing samples remain Unknown, not a stale last-known value."
     },
     {
       "id": 3,
-      "title": "VRAM Usage",
+      "title": "",
       "type": "stat",
       "datasource": "${datasource}",
       "gridPos": {
-        "x": 16,
+        "x": 12,
         "y": 0,
-        "w": 8,
+        "w": 6,
         "h": 4
       },
       "options": {
         "reduceOptions": {
           "calcs": [
-            "lastNotNull"
+            "last"
           ]
         },
         "orientation": "auto",
         "textMode": "value_and_name",
-        "colorMode": "value",
-        "graphMode": "none",
+        "colorMode": "background",
+        "graphMode": "area",
         "justifyMode": "auto",
         "text": {
           "titleSize": 12,
@@ -280,186 +289,714 @@
           },
           "color": {
             "mode": "thresholds"
-          }
+          },
+          "noValue": "Unknown",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            }
+          ]
         },
         "overrides": []
       },
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "ollama_model_vram_bytes{job=\"ollama\"}",
-          "legendFormat": "{{model}} {{quant}} @ {{instance}}",
+          "expr": "(sum(((ollama_model_vram_bytes{job=\"ollama\"}) and ollama_model_loaded{job=\"ollama\"}) or (ollama_model_loaded{job=\"ollama\"} * (0 / 0)))) or vector(0 / 0)",
+          "legendFormat": "Model VRAM",
           "refId": "A",
-          "instant": true,
-          "range": false
+          "instant": false,
+          "range": true,
+          "format": "time_series"
         }
-      ]
+      ],
+      "description": "Sum across current model inventory. Unknown if any current model lacks a memory sample. Reported model allocation, not whole-device or dedicated Apple VRAM. Sparkline shows aggregate history across the selected range; the number is its latest evaluated sample. Missing samples remain Unknown, not a stale last-known value."
     },
     {
       "id": 4,
-      "title": "Decode TPS",
+      "title": "",
       "type": "stat",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "text": {
+          "titleSize": 12,
+          "valueSize": 24
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "Unknown",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "(sum(increase(ollama_requests_total{job=\"ollama\",endpoint=~\"$endpoint\"}[24h]))) or vector(0 / 0)",
+          "legendFormat": "Requests \u00b7 24h",
+          "refId": "A",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "description": "Estimated counter increase over 24 hours, selected endpoints, including removed models with retained counter history. Not the dashboard time-range total. Sparkline shows aggregate history across the selected range; the number is its latest evaluated sample. Missing samples remain Unknown, not a stale last-known value."
+    },
+    {
+      "id": 5,
+      "title": "Current models by exporter",
+      "description": "One row per current model and full scrape identity. Horizontal scroll keeps columns inside the panel; hover a cell and use its inspect icon for the full value. Extra scrape labels remain separate columns. Missing metrics are Unknown; zero is a measured value. Latest throughput is not concurrent aggregate throughput. Requests use selected endpoints and 24-hour counter increases; removed inventory rows are excluded. Configurable illustrative bands: VRAM zero / >0 / 4 GiB / 16 GiB; decode zero / 1 / 10 / 30 tok/s; prefill zero / 1 / 100 / 500 tok/s; requests zero / 1 / 100 / 1000 per 24h. VRAM and requests use blue intensity, not health severity. TPS bands are illustrative performance only; tune for model/hardware. Gray zero is a measured zero; gray Unknown is missing.",
+      "type": "table",
       "datasource": "${datasource}",
       "gridPos": {
         "x": 0,
         "y": 4,
-        "w": 8,
-        "h": 4
+        "w": 24,
+        "h": 9
       },
       "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
         },
-        "orientation": "auto",
-        "textMode": "value_and_name",
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "text": {
-          "titleSize": 12,
-          "valueSize": 24
-        }
+        "sortBy": [
+          {
+            "displayName": "Model",
+            "desc": false
+          }
+        ]
       },
       "fieldConfig": {
         "defaults": {
+          "noValue": "Unknown",
           "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unknown"
+                }
+              }
+            }
+          ],
+          "custom": {
+            "align": "auto",
+            "minWidth": 100,
+            "inspect": true,
+            "filterable": true,
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Model"
+            },
+            "properties": [
               {
-                "color": "green",
-                "value": null
+                "id": "custom.minWidth",
+                "value": 300
+              },
+              {
+                "id": "custom.inspect",
+                "value": true
               }
             ]
           },
-          "color": {
-            "mode": "thresholds"
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Exporter"
+            },
+            "properties": [
+              {
+                "id": "custom.minWidth",
+                "value": 180
+              },
+              {
+                "id": "custom.inspect",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Quantization"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              },
+              {
+                "id": "custom.inspect",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Family"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              },
+              {
+                "id": "custom.inspect",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Job"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              },
+              {
+                "id": "custom.inspect",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Loaded"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "Unloaded",
+                        "color": "yellow"
+                      },
+                      "1": {
+                        "text": "Loaded",
+                        "color": "green"
+                      }
+                    }
+                  },
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "nan",
+                      "result": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  },
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "null",
+                      "result": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VRAM"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              },
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "#808080",
+                      "value": null
+                    },
+                    {
+                      "color": "light-blue",
+                      "value": 1
+                    },
+                    {
+                      "color": "blue",
+                      "value": 4294967296
+                    },
+                    {
+                      "color": "dark-blue",
+                      "value": 17179869184
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "nan",
+                      "result": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  },
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "null",
+                      "result": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Decode \u00b7 latest"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 140
+              },
+              {
+                "id": "unit",
+                "value": "suffix: tok/s"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "#808080",
+                      "value": null
+                    },
+                    {
+                      "color": "light-blue",
+                      "value": 1
+                    },
+                    {
+                      "color": "blue",
+                      "value": 10
+                    },
+                    {
+                      "color": "green",
+                      "value": 30
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "nan",
+                      "result": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  },
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "null",
+                      "result": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Prefill \u00b7 latest"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 140
+              },
+              {
+                "id": "unit",
+                "value": "suffix: tok/s"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "#808080",
+                      "value": null
+                    },
+                    {
+                      "color": "light-blue",
+                      "value": 1
+                    },
+                    {
+                      "color": "blue",
+                      "value": 100
+                    },
+                    {
+                      "color": "green",
+                      "value": 500
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "nan",
+                      "result": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  },
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "null",
+                      "result": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Requests \u00b7 24h"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 140
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "#808080",
+                      "value": null
+                    },
+                    {
+                      "color": "light-blue",
+                      "value": 1
+                    },
+                    {
+                      "color": "blue",
+                      "value": 100
+                    },
+                    {
+                      "color": "dark-blue",
+                      "value": 1000
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "nan",
+                      "result": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  },
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "null",
+                      "result": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
           }
-        },
-        "overrides": []
+        ]
       },
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "ollama_tokens_per_second{job=\"ollama\"}",
-          "legendFormat": "{{model}} {{quant}} @ {{instance}}",
+          "expr": "label_replace((ollama_model_loaded{job=\"ollama\"}) * 1, \"__dashboard_field__\", \"Loaded\", \"\", \"\")",
+          "legendFormat": "",
           "refId": "A",
           "instant": true,
-          "range": false
-        }
-      ]
-    },
-    {
-      "id": 5,
-      "title": "Prefill TPS",
-      "type": "stat",
-      "datasource": "${datasource}",
-      "gridPos": {
-        "x": 8,
-        "y": 4,
-        "w": 8,
-        "h": 4
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
+          "range": false,
+          "format": "time_series"
         },
-        "orientation": "auto",
-        "textMode": "value_and_name",
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "text": {
-          "titleSize": 12,
-          "valueSize": 24
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "ollama_prompt_tokens_per_second{job=\"ollama\"}",
-          "legendFormat": "{{model}} {{quant}} @ {{instance}}",
-          "refId": "A",
+          "expr": "label_replace((((ollama_model_vram_bytes{job=\"ollama\"}) and ollama_model_loaded{job=\"ollama\"}) or (ollama_model_loaded{job=\"ollama\"} * (0 / 0))) * 1, \"__dashboard_field__\", \"VRAM\", \"\", \"\")",
+          "legendFormat": "",
+          "refId": "B",
           "instant": true,
-          "range": false
-        }
-      ]
-    },
-    {
-      "id": 6,
-      "title": "Total Requests",
-      "type": "stat",
-      "datasource": "${datasource}",
-      "gridPos": {
-        "x": 16,
-        "y": 4,
-        "w": 8,
-        "h": 4
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
+          "range": false,
+          "format": "time_series"
         },
-        "orientation": "auto",
-        "textMode": "value_and_name",
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "text": {
-          "titleSize": 12,
-          "valueSize": 24
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "increase(ollama_requests_total{job=\"ollama\"}[24h])",
-          "legendFormat": "{{model}} {{quant}} {{endpoint}} @ {{instance}}",
-          "refId": "A",
+          "expr": "label_replace((((ollama_tokens_per_second{job=\"ollama\"}) and ollama_model_loaded{job=\"ollama\"}) or (ollama_model_loaded{job=\"ollama\"} * (0 / 0))) * 1, \"__dashboard_field__\", \"Decode\", \"\", \"\")",
+          "legendFormat": "",
+          "refId": "C",
           "instant": true,
-          "range": false
+          "range": false,
+          "format": "time_series"
+        },
+        {
+          "datasource": "${datasource}",
+          "expr": "label_replace((((ollama_prompt_tokens_per_second{job=\"ollama\"}) and ollama_model_loaded{job=\"ollama\"}) or (ollama_model_loaded{job=\"ollama\"} * (0 / 0))) * 1, \"__dashboard_field__\", \"Prefill\", \"\", \"\")",
+          "legendFormat": "",
+          "refId": "D",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        },
+        {
+          "datasource": "${datasource}",
+          "expr": "label_replace((((sum without (endpoint) (increase(ollama_requests_total{job=\"ollama\",endpoint=~\"$endpoint\"}[24h]))) and ollama_model_loaded{job=\"ollama\"}) or (ollama_model_loaded{job=\"ollama\"} * (0 / 0))) * 1, \"__dashboard_field__\", \"Requests\", \"\", \"\")",
+          "legendFormat": "",
+          "refId": "E",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns",
+            "valueLabel": "__dashboard_field__"
+          }
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "model": 0,
+              "instance": 1,
+              "quant": 2,
+              "family": 3,
+              "job": 4,
+              "Loaded": 5,
+              "VRAM": 6,
+              "Decode": 7,
+              "Prefill": 8,
+              "Requests": 9
+            },
+            "renameByName": {
+              "model": "Model",
+              "instance": "Exporter",
+              "quant": "Quantization",
+              "family": "Family",
+              "job": "Job",
+              "VRAM": "VRAM",
+              "Decode": "Decode \u00b7 latest",
+              "Prefill": "Prefill \u00b7 latest",
+              "Requests": "Requests \u00b7 24h"
+            }
+          }
         }
       ]
     },
@@ -470,7 +1007,7 @@
       "datasource": "${datasource}",
       "gridPos": {
         "x": 0,
-        "y": 8,
+        "y": 13,
         "w": 12,
         "h": 8
       },
@@ -517,7 +1054,7 @@
       "datasource": "${datasource}",
       "gridPos": {
         "x": 12,
-        "y": 8,
+        "y": 13,
         "w": 12,
         "h": 8
       },
@@ -569,7 +1106,7 @@
       "datasource": "${datasource}",
       "gridPos": {
         "x": 0,
-        "y": 16,
+        "y": 21,
         "w": 8,
         "h": 8
       },
@@ -609,7 +1146,7 @@
       "datasource": "${datasource}",
       "gridPos": {
         "x": 8,
-        "y": 16,
+        "y": 21,
         "w": 8,
         "h": 8
       },
@@ -650,7 +1187,7 @@
       "description": "Rising values indicate degraded KV cache efficiency. Correlates with increasing context length.",
       "gridPos": {
         "x": 16,
-        "y": 16,
+        "y": 21,
         "w": 8,
         "h": 8
       },
@@ -690,7 +1227,7 @@
       "datasource": "${datasource}",
       "gridPos": {
         "x": 0,
-        "y": 24,
+        "y": 29,
         "w": 8,
         "h": 6
       },
@@ -736,7 +1273,7 @@
       "datasource": "${datasource}",
       "gridPos": {
         "x": 8,
-        "y": 24,
+        "y": 29,
         "w": 8,
         "h": 6
       },
@@ -776,7 +1313,7 @@
       "datasource": "${datasource}",
       "gridPos": {
         "x": 16,
-        "y": 24,
+        "y": 29,
         "w": 8,
         "h": 6
       },

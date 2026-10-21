@@ -156,8 +156,10 @@ scrape_configs:
 
 Import [deploy/grafana/dashboard.json](deploy/grafana/dashboard.json) and select
 your Prometheus data source. Use scrape job name `ollama` for the dashboard's
-model queries. The overview uses six numeric/status panels in two rows, with
-model, quantization and exporter identity in the legends.
+model queries. The overview shows aggregate totals and a current-model table with
+separate model, exporter, quantization and metric columns. At narrow widths, scroll
+the table horizontally and inspect a cell to read its full identity. Missing
+metrics show Unknown; measured zeros remain zero.
 
 An exporter upgrade does not update an imported dashboard. As of 2026-10-21,
 [Grafana.com dashboard 25086](https://grafana.com/grafana/dashboards/25086-ollama-llm-inference/)

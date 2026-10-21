@@ -47,67 +47,89 @@ localhost with your exporter's hostname or IP in the scrape config:
     static_configs:
       - targets: ['exporter-host.example.com:9400']
 
-## Panels
+## Overview and model table
 
-Rows 1–2 — Health and Overview
-  Ollama Status, Model Loaded, VRAM Usage
-  Decode TPS, Prefill TPS, Total Requests (24h)
+Four summary tiles show reachable/observed Ollama endpoints, loaded model-instance
+count, reported model VRAM, and completed requests over 24 hours. Counts and memory
+are scoped to the selected datasource's `ollama` job. Disappeared scrape targets
+are not counted as observed; use Prometheus target health separately. Latest
+per-model throughput values are not summed into a misleading aggregate speed.
 
-Row 3 — Throughput
-  Decode vs Prefill TPS over time
-  Request duration percentiles (p50/p95/p99)
+The full-width table separates model, exporter instance, quantization, family,
+job, loaded state, VRAM, latest decode/prefill throughput and request counts.
+Additional scrape labels remain columns and participate in identity matching.
+The same model on two exporters (or in two scrape scopes) remains two rows.
+The table scrolls horizontally within its panel at narrow widths. Hover a cell
+and use its inspection icon to read/copy the full value; names are not shortened
+in the queries. Column filters can narrow the displayed rows.
 
-Row 4 — Inference Phases
-  Eval duration p95 (decode)
-  Prompt eval duration p95 (prefill)
-  KV cache pressure ratio
+The four title-free stat panels show aggregate sparklines from range queries.
+Their numbers use the latest evaluated sample, including explicit Unknown gaps;
+they do not carry an older value forward with `lastNotNull`. Range evaluation
+uses Grafana's sampling interval, so the final sample may precede the exact range
+end by up to one interval. The model table uses instant queries at the range end.
+Current `ollama_model_loaded` inventory anchors table rows, including unloaded
+models. Optional metrics match **all** identity labels; only the endpoint label
+is deliberately aggregated for request counts. Removed inventory rows stay out
+of the table even when throughput gauges or historical request counters remain.
+Explicit zero remains zero; absent metrics are Unknown, not zero or Unloaded.
+The VRAM total is Unknown if any current inventory row lacks memory data.
 
-Row 5 — Model Lifecycle
-  Load/unload events
-  Requests in flight
-  Request rate (req/s)
+The Endpoint picker applies to the table and aggregate request counts. Requests
+are estimated 24-hour counter increases, not lifetime counts or the dashboard's
+selected-range totals. The aggregate request tile includes retained history for
+removed models; the table only includes current inventory. An absent request
+series is Unknown, rather than evidence that no requests occurred.
 
-## Overview labels and current values
+The eight existing history panels retain throughput, request duration, inference
+phase duration, cache pressure, lifecycle, inflight requests and request rate.
+Their historical samples can include models no longer in the current table.
 
-Overview stat tiles show a concise series name alongside each value: the exporter
-instance, plus model and quantization where applicable. Request totals also name
-the endpoint. This keeps multiple models/exporters distinguishable without
-Grafana falling back to a long Prometheus label set above each value (issue #21).
+## Configurable table colors
 
-The overview uses instant queries evaluated at the selected time range's end.
-This avoids retaining removed model gauges through `lastNotNull` over historical
-samples. Time-series panels still show history. Total Requests remains a 24-hour
-increase per model/endpoint, not a lifetime count or a count for the dashboard's
-entire selected range; retained counter history can still include removed models.
+Loaded is green, Unloaded yellow, and missing values display gray Unknown.
+Numeric cells use solid backgrounds with these absolute lower bounds:
+
+| Column | Neutral base | Light blue | Blue | Highest band |
+| --- | --- | --- | --- | --- |
+| Model VRAM | 0 bytes | 1 byte | 4 GiB | 16 GiB, dark blue |
+| Latest decode | 0 tok/s | 1 tok/s | 10 tok/s | 30 tok/s, green |
+| Latest prefill | 0 tok/s | 1 tok/s | 100 tok/s | 500 tok/s, green |
+| Requests over 24h | 0 requests | 1 request | 100 requests | 1,000 requests, dark blue |
+
+VRAM and request counts show magnitude, not capacity utilization or health.
+TPS bands are illustrative performance guides: model size, quantization, hardware
+and workload determine appropriate expectations. Change **Field overrides →
+Thresholds** for each column to suit your deployment. These are display settings,
+not alerts or security thresholds. Unknown remains gray and labeled Unknown;
+a measured zero remains a numeric zero. Aggregate stat threshold meanings are
+unchanged; their backgrounds use those existing colors.
+
+## Validation and distribution
+
+From the repository root:
+
+    go test ./deploy/grafana
+    python3 deploy/grafana/query_regressions.py > /tmp/dashboard-tests.yml
+    promtool test rules /tmp/dashboard-tests.yml
+
+The query regression generator uses the shipped expressions. It covers duplicate
+models across exporters and additional scrape scopes, zero and missing values,
+endpoint aggregation/selection, stale inventory with retained metrics, and empty
+inventory. It requires an existing Prometheus `promtool`; it installs nothing.
+Structural Go tests cover datasource selection, table transforms, inspection and
+layout bounds. These checks do not replace a rendered Grafana review.
+
+The previous multi-series stat layout overflowed during a half-width manual
+review. The replacement table layout was manually accepted at half width in Grafana
+10.4.0 with a synthetic three-model-instance/two-exporter fixture. Both fixture
+datasources returned identical numeric values; all aggregate sparklines returned
+historical samples. Sparse fixture data includes genuine gaps. This is not a
+guarantee for every viewport, Grafana version or label cardinality. Check full-name
+inspection, contained scrolling and unknown versus zero values after importing.
 
 For an existing dashboard imported from Grafana.com, import this repository's
 updated `dashboard.json` and replace the dashboard with the same UID after
-reviewing any local customizations. Updating the exporter alone does not update
-an imported dashboard, and the Grafana.com listing needs a separate publication.
-
-Configuration regression check (from the repository root):
-
-    go test ./deploy/grafana
-
-Before publishing, import into a real Grafana instance with one and multiple
-models/exporters. Verify the overview names and numeric values remain readable,
-status mappings still show UP/DOWN and IN VRAM/UNLOADED, and removed gauge series
-vanish after Prometheus ingests their disappearance. Check the historical charts
-and 24-hour request totals independently. The configuration test does not validate
-Grafana rendering or a deployed Grafana.com revision.
-
-## Multiple-series readability
-
-The six overview tiles occupy two rows of three, with explicit 12-pixel label
-and 24-pixel value sizes. This gives model, quantization, instance, and endpoint
-names more room than the former six-column row, which could shrink names to tiny
-text even after raw-label fallback was removed.
-
-An isolated Grafana 10.4.0 / Prometheus 2.51.0 fixture with three model series
-across two exporter instances rendered readable overview labels at an 1800-pixel
-viewport. All six stat queries returned the expected series and values. This
-layout change preserves queries, units, mappings, legends, datasource selection,
-and instant-query behavior. It does not certify arbitrary model-name lengths,
-higher cardinality, or smaller viewports, and does not update Grafana.com or an
-already-imported dashboard. The fixture omitted histogram and lifecycle samples;
-its empty historical panels were not evidence of runtime coverage for those data.
+reviewing local customizations. Updating the exporter does not update imported
+dashboards. Grafana.com publication is separate; this source update does not
+change the published revision.
