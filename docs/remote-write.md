@@ -53,7 +53,7 @@ remote_write:
     headers:
       X-Scope-OrgID: tenant1
     external_labels:
-      cluster: xena
+      cluster: example-cluster
       env: homelab
 ```
 

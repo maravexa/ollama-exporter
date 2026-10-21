@@ -49,7 +49,7 @@ func TestGather_Counter(t *testing.T) {
 	c.WithLabelValues("/api/foo").Add(7)
 
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	got, err := Gather(reg, NewLabels(map[string]string{"cluster": "xena"}), now)
+	got, err := Gather(reg, NewLabels(map[string]string{"cluster": "example-cluster"}), now)
 	if err != nil {
 		t.Fatalf("Gather: %v", err)
 	}
@@ -65,8 +65,8 @@ func TestGather_Counter(t *testing.T) {
 		t.Errorf("timestamp = %v, want %v", s.Samples[0].Timestamp, now.UnixMilli())
 	}
 	// External label merged.
-	if findSeries(got, "test_counter", map[string]string{"cluster": "xena"}) == nil {
-		t.Error("external label cluster=xena not merged")
+	if findSeries(got, "test_counter", map[string]string{"cluster": "example-cluster"}) == nil {
+		t.Error("external label cluster=example-cluster not merged")
 	}
 }
 
