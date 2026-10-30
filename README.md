@@ -287,6 +287,8 @@ counters, histograms and Prometheus history remain available.
 | `ollama_prompt_tokens_per_second` | Gauge | Derived: prompt_eval_count / prompt_eval_duration |
 | `ollama_requests_in_flight` | Gauge | Current concurrent requests (proxy mode) |
 | `ollama_requests_total` | Counter | Completed inferences by model and endpoint |
+| `ollama_prompt_tokens_total` | Counter | Native prompt_eval_count summed by model and endpoint |
+| `ollama_eval_tokens_total` | Counter | Native eval_count summed by model and endpoint |
 | `ollama_compatibility_input_tokens` | Histogram | Reported input counts per completed compatibility request |
 | `ollama_compatibility_output_tokens` | Histogram | Reported output counts per completed compatibility request |
 | `ollama_kv_cache_pressure_ratio` | Gauge | Derived: prompt eval duration / token ratio trend |

@@ -13,6 +13,9 @@ Versioning follows Semantic Versioning (https://semver.org/).
 - Record request duration during reverse-proxy aborts and close upstream bodies.
 
 ### Added
+- Native token counters `ollama_prompt_tokens_total` and `ollama_eval_tokens_total`,
+  summing `prompt_eval_count` and `eval_count` from completed native responses by
+  model, family, quant, and endpoint.
 - Bounded-label extraction result and field-skip counters, with exact encoded
   scalar/key and nesting boundary tests. Invalid reported usage is distinguished
   from missing usage and measured zero.
