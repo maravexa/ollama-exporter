@@ -254,5 +254,11 @@ func (p *Proxy) recordGenerateMetrics(gen ollama.GenerateResponse, path string) 
 		}
 	}
 
+	if gen.PromptEvalCount > 0 {
+		p.metrics.PromptTokensTotal.WithLabelValues(append(labels, path)...).Add(float64(gen.PromptEvalCount))
+	}
+	if gen.EvalCount > 0 {
+		p.metrics.EvalTokensTotal.WithLabelValues(append(labels, path)...).Add(float64(gen.EvalCount))
+	}
 	p.metrics.RequestsTotal.WithLabelValues(append(labels, path)...).Inc()
 }

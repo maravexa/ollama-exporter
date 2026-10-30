@@ -119,10 +119,11 @@ func TestPoller_ModelUnload_IncrementsCounter(t *testing.T) {
 func TestProxy_TPSDerivation(t *testing.T) {
 	// eval_count=100, eval_duration=2_000_000_000 ns (2s) → TPS = 50.0
 	gen := ollama.GenerateResponse{
-		Model:        "llama3.1:8b",
-		Done:         true,
-		EvalCount:    100,
-		EvalDuration: 2_000_000_000,
+		Model:           "llama3.1:8b",
+		Done:            true,
+		PromptEvalCount: 20,
+		EvalCount:       100,
+		EvalDuration:    2_000_000_000,
 	}
 	body, _ := json.Marshal(gen)
 
@@ -169,5 +170,13 @@ func TestProxy_TPSDerivation(t *testing.T) {
 	tps := testutil.ToFloat64(m.TokensPerSecond.WithLabelValues("llama3.1:8b", "llama", "q4_k_m"))
 	if tps != 50.0 {
 		t.Errorf("tokens_per_second = %v, want 50.0", tps)
+	}
+
+	labels := []string{"llama3.1:8b", "llama", "q4_k_m", "/api/generate"}
+	if got := testutil.ToFloat64(m.PromptTokensTotal.WithLabelValues(labels...)); got != 20 {
+		t.Errorf("prompt_tokens_total = %v, want 20", got)
+	}
+	if got := testutil.ToFloat64(m.EvalTokensTotal.WithLabelValues(labels...)); got != 100 {
+		t.Errorf("eval_tokens_total = %v, want 100", got)
 	}
 }
