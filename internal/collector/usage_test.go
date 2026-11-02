@@ -74,6 +74,7 @@ func TestCompatibilityHTTP(t *testing.T) {
 						t.Fatal("SSE fidelity", err)
 					}
 					waitFinished(t, reg, 1)
+					assertNativeTokens(t, reg, 0, 0)
 					if metric(t, reg, "ollama_requests_total") != 1 {
 						t.Fatal("request count")
 					}
@@ -116,6 +117,7 @@ func TestCompatibilityZeroAndTruncation(t *testing.T) {
 			_, _ = io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
 			waitFinished(t, reg, 1)
+			assertNativeTokens(t, reg, 0, 0)
 			if histSampleCount(t, reg, "ollama_compatibility_output_tokens") != tc.count {
 				t.Fatal("zero/truncation semantics")
 			}
@@ -134,6 +136,7 @@ func TestCompatibilityFallbackAndEmptyBody(t *testing.T) {
 			_, _ = io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
 			waitFinished(t, reg, 1)
+			assertNativeTokens(t, reg, 0, 0)
 			want := float64(0)
 			if body != "" {
 				want = 1

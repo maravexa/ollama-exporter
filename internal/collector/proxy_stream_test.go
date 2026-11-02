@@ -116,12 +116,13 @@ func TestNativeHTTP(t *testing.T) {
 					t.Fatalf("headers/status/trailers: %v", resp)
 				}
 				waitFinished(t, reg, 1)
+				assertNativeTokens(t, reg, 16, 100)
 				if metric(t, reg, "ollama_tokens_per_second") != 25 || metric(t, reg, "ollama_prompt_tokens_per_second") != 128 || metric(t, reg, "ollama_requests_total") != 1 || histSampleCount(t, reg, "ollama_eval_duration_seconds") != 1 {
 					t.Fatal("incorrect/excess observations")
 				}
 				fs, _ := reg.Gather()
 				for _, f := range fs {
-					if f.GetName() == "ollama_requests_total" {
+					if f.GetName() == "ollama_requests_total" || f.GetName() == "ollama_prompt_tokens_total" || f.GetName() == "ollama_eval_tokens_total" {
 						labels := map[string]string{}
 						for _, l := range f.Metric[0].Label {
 							labels[l.GetName()] = l.GetValue()
@@ -272,6 +273,7 @@ func TestIncompleteAndUnaffectedHTTP(t *testing.T) {
 			if metric(t, reg, "ollama_requests_total") != 0 || histSampleCount(t, reg, "ollama_eval_duration_seconds") != 0 {
 				t.Fatal("fabricated completion")
 			}
+			assertNativeTokens(t, reg, 0, 0)
 		})
 	}
 }
@@ -291,6 +293,7 @@ func TestUpstreamReadFailureHTTP(t *testing.T) {
 	if metric(t, reg, "ollama_requests_total") != 0 {
 		t.Fatal("failed read counted as completion")
 	}
+	assertNativeTokens(t, reg, 0, 0)
 }
 func TestCancellationHTTP(t *testing.T) {
 	cancelled := make(chan struct{})
@@ -322,6 +325,7 @@ func TestCancellationHTTP(t *testing.T) {
 	if metric(t, reg, "ollama_requests_total") != 0 {
 		t.Fatal("cancelled completion counted")
 	}
+	assertNativeTokens(t, reg, 0, 0)
 }
 func TestConcurrentHTTPStreams(t *testing.T) {
 	srv, _, reg := serveProxy(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, terminal) }))
@@ -344,6 +348,7 @@ func TestConcurrentHTTPStreams(t *testing.T) {
 	}
 	wg.Wait()
 	waitFinished(t, reg, 20)
+	assertNativeTokens(t, reg, 320, 2000)
 	if metric(t, reg, "ollama_requests_total") != 20 || histSampleCount(t, reg, "ollama_eval_duration_seconds") != 20 {
 		t.Fatal("concurrent observations")
 	}

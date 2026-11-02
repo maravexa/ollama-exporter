@@ -70,6 +70,16 @@ quant, and endpoint. Requires clean upstream EOF and, for SSE, `[DONE]` or
 `message_stop`. Compatibility completions count even when usage is absent.
 Failed, truncated, cancelled, non-2xx, and excluded requests do not increment it.
 
+### `ollama_prompt_tokens_total` (Counter)
+Sum of `prompt_eval_count` from completed native (`done:true`) `/api/generate`
+and `/api/chat` responses, by model, family, quant, and endpoint. Responses
+reporting zero or no count do not increment it. `rate()` gives prompt tokens per
+second across requests; compatibility endpoints use the histograms below.
+
+### `ollama_eval_tokens_total` (Counter)
+Sum of `eval_count` from completed native responses, labelled and gated as
+`ollama_prompt_tokens_total`.
+
 ## Compatibility Usage (Proxy Mode)
 
 POST `/v1/chat/completions`, `/v1/completions`, and `/v1/messages` support JSON
